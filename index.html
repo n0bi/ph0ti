@@ -314,6 +314,7 @@
     </div>
   </div>
 
+  
   <script>
     const video = document.getElementById('video');
     const preview = document.getElementById('preview');
@@ -353,8 +354,8 @@
           sharpen: 0.1,
           flashBloom: 0.2,
           barrel: 0.03,
-          edgeBlur: 0.22,
-          edgeBlurStart: 0.5,
+          edgeBlur: 0.24,
+          edgeBlurStart: 0.48,
           blockiness: 0.36,
           haze: 0.05,
           magentaBoost: 3,
@@ -403,38 +404,38 @@
         }
       },
       instant: {
-        badge: 'Instant soft',
-        label: 'Instant soft',
-        filePrefix: 'instant_soft',
+        badge: 'Polaroid soft',
+        label: 'Polaroid soft',
+        filePrefix: 'polaroid_soft',
         previewLongEdge: 820,
         maxLongEdge: 1520,
         outputQuality: 0.91,
         profile: {
-          cropZoom: 1.53,
-          contrast: 0.86,
-          exposure: 1.05,
-          saturation: 0.82,
+          cropZoom: 1.7,
+          contrast: 0.84,
+          exposure: 1.04,
+          saturation: 0.8,
           warmthR: 1.05,
           warmthG: 1.0,
           warmthB: 0.95,
-          blackLift: 20,
+          blackLift: 22,
           highlightPush: 0.08,
           noise: 13,
           colorNoise: 5,
-          vignette: 0.08,
+          vignette: 0.09,
           hotspot: 0.03,
-          chromaShift: 0.45,
-          sharpen: 0.015,
-          blur: 0.14,
+          chromaShift: 0.38,
+          sharpen: 0.01,
+          blur: 0.16,
           flashBloom: 0.05,
-          barrel: 0.014,
-          edgeBlur: 0.18,
-          edgeBlurStart: 0.56,
+          barrel: 0.008,
+          edgeBlur: 0.28,
+          edgeBlurStart: 0.42,
           blockiness: 0.05,
-          haze: 0.18,
+          haze: 0.2,
           magentaBoost: 2.5,
-          coolBoost: 1,
-          edgeFade: 0.24,
+          coolBoost: 0.8,
+          edgeFade: 0.3,
           lowLightExposureBoost: 0.05,
           lowLightNoiseBoost: 2,
           lowLightBloomBoost: 0.02,
@@ -449,10 +450,10 @@
         maxLongEdge: 1600,
         outputQuality: 0.92,
         profile: {
-          cropZoom: 1.3,
-          contrast: 0.93,
+          cropZoom: 1.48,
+          contrast: 0.92,
           exposure: 1.08,
-          saturation: 0.86,
+          saturation: 0.84,
           warmthR: 1.03,
           warmthG: 1.0,
           warmthB: 1.05,
@@ -460,24 +461,64 @@
           highlightPush: 0.16,
           noise: 8,
           colorNoise: 3,
-          vignette: 0.06,
+          vignette: 0.07,
           hotspot: 0.09,
-          chromaShift: 0.28,
+          chromaShift: 0.26,
           sharpen: 0.03,
           blur: 0.1,
           flashBloom: 0.08,
-          barrel: 0.01,
-          edgeBlur: 0.11,
-          edgeBlurStart: 0.62,
+          barrel: 0.008,
+          edgeBlur: 0.18,
+          edgeBlurStart: 0.5,
           blockiness: 0.04,
           haze: 0.14,
           magentaBoost: 1.2,
           coolBoost: 2.2,
-          edgeFade: 0.12,
+          edgeFade: 0.16,
           lowLightExposureBoost: 0.08,
           lowLightNoiseBoost: 1.8,
           lowLightBloomBoost: 0.06,
           lowLightContrastBoost: 0.03
+        }
+      },
+      vcr: {
+        badge: 'VCR / CCTV',
+        label: 'VCR / CCTV',
+        filePrefix: 'vcr_cctv',
+        previewLongEdge: 640,
+        maxLongEdge: 960,
+        outputQuality: 0.82,
+        profile: {
+          cropZoom: 1.1,
+          contrast: 0.9,
+          exposure: 1.0,
+          saturation: 0.78,
+          warmthR: 1.03,
+          warmthG: 1.0,
+          warmthB: 0.98,
+          blackLift: 8,
+          highlightPush: 0.08,
+          noise: 15,
+          colorNoise: 8,
+          vignette: 0.05,
+          hotspot: 0,
+          chromaShift: 0.35,
+          sharpen: 0,
+          blur: 0.22,
+          flashBloom: 0,
+          barrel: 0,
+          edgeBlur: 0,
+          edgeBlurStart: 0.7,
+          blockiness: 0.42,
+          haze: 0.04,
+          magentaBoost: 2,
+          coolBoost: 0,
+          edgeFade: 0,
+          vcrStrength: 0.85,
+          lowLightExposureBoost: 0.03,
+          lowLightNoiseBoost: 4,
+          lowLightBloomBoost: 0,
+          lowLightContrastBoost: 0.02
         }
       }
     };
@@ -490,7 +531,15 @@
       toastTimer: 0,
       previewRAF: 0,
       lastPreviewTick: 0,
-      previewFPS: 10
+      previewFPS: 10,
+      renderBusy: false,
+      faceDetector: null,
+      faceDetectorChecked: false,
+      faceDetectorNoticeShown: false,
+      latestFaces: [],
+      faceDetectPending: null,
+      lastFaceDetectAt: 0,
+      vcrFieldPhase: 0
     };
 
     function clamp(value, min = 0, max = 255) {
@@ -617,6 +666,7 @@
         magentaBoost: base.magentaBoost,
         coolBoost: base.coolBoost,
         edgeFade: base.edgeFade || 0,
+        vcrStrength: base.vcrStrength || 0,
         lowLight
       };
     }
@@ -908,7 +958,7 @@
       overlay.width = width;
       overlay.height = height;
       const octx = overlay.getContext('2d');
-      const blurRadius = Math.max(1.6, Math.min(7, width * amount * 0.01));
+      const blurRadius = Math.max(1.6, Math.min(8, width * amount * 0.012));
 
       octx.filter = `blur(${blurRadius}px)`;
       octx.drawImage(ctx.canvas, 0, 0, width, height);
@@ -916,18 +966,18 @@
       octx.globalCompositeOperation = 'destination-in';
 
       const gradient = octx.createRadialGradient(
-        width / 2, height / 2, Math.min(width, height) * Math.max(0.18, start * 0.42),
-        width / 2, height / 2, Math.max(width, height) * 0.74
+        width / 2, height / 2, Math.min(width, height) * Math.max(0.12, start * 0.34),
+        width / 2, height / 2, Math.max(width, height) * 0.76
       );
       gradient.addColorStop(0, 'rgba(255,255,255,0)');
-      gradient.addColorStop(Math.max(0.01, Math.min(0.82, start)), 'rgba(255,255,255,0)');
+      gradient.addColorStop(Math.max(0.01, Math.min(0.84, start)), 'rgba(255,255,255,0)');
       gradient.addColorStop(1, 'rgba(255,255,255,1)');
       octx.fillStyle = gradient;
       octx.fillRect(0, 0, width, height);
       octx.globalCompositeOperation = 'source-over';
 
       ctx.save();
-      ctx.globalAlpha = Math.min(0.95, amount * 1.3);
+      ctx.globalAlpha = Math.min(0.98, amount * 1.28);
       ctx.drawImage(overlay, 0, 0, width, height);
       ctx.restore();
     }
@@ -946,6 +996,14 @@
       ctx.restore();
     }
 
+    function drawAnalogFrameBorder(ctx, width, height, opacity = 0.18) {
+      ctx.save();
+      ctx.strokeStyle = `rgba(255,245,238,${opacity})`;
+      ctx.lineWidth = Math.max(1, width * 0.0025);
+      ctx.strokeRect(ctx.lineWidth / 2, ctx.lineWidth / 2, width - ctx.lineWidth, height - ctx.lineWidth);
+      ctx.restore();
+    }
+
     function compositeToCanvas(renderCanvas, targetCanvas) {
       targetCanvas.width = renderCanvas.width;
       targetCanvas.height = renderCanvas.height;
@@ -954,7 +1012,202 @@
       ctx.drawImage(renderCanvas, 0, 0);
     }
 
-    function processFrame(modeKey, longEdgeCap) {
+    function normalizeDetectedFaces(faceResults) {
+      return (faceResults || []).map((face) => {
+        const box = face.boundingBox || face;
+        return {
+          x: box.x || 0,
+          y: box.y || 0,
+          width: box.width || 0,
+          height: box.height || 0
+        };
+      }).filter((box) => box.width > 1 && box.height > 1);
+    }
+
+    async function ensureFaceDetector() {
+      if (STATE.faceDetectorChecked) return STATE.faceDetector;
+      STATE.faceDetectorChecked = true;
+      if ('FaceDetector' in window) {
+        try {
+          STATE.faceDetector = new FaceDetector({ fastMode: true, maxDetectedFaces: 8 });
+        } catch (err) {
+          console.error(err);
+          STATE.faceDetector = null;
+        }
+      } else {
+        STATE.faceDetector = null;
+      }
+      return STATE.faceDetector;
+    }
+
+    async function detectFacesOnCanvas(sourceCanvas, force = false) {
+      const detector = await ensureFaceDetector();
+      if (!detector) {
+        if (STATE.mode === 'vcr' && !STATE.faceDetectorNoticeShown) {
+          STATE.faceDetectorNoticeShown = true;
+          showToast('VCR face mosaic needs FaceDetector support', true);
+        }
+        return STATE.latestFaces;
+      }
+
+      const now = performance.now();
+      if (!force && STATE.faceDetectPending) return STATE.latestFaces;
+      if (!force && now - STATE.lastFaceDetectAt < 220) return STATE.latestFaces;
+
+      STATE.lastFaceDetectAt = now;
+      const job = detector.detect(sourceCanvas)
+        .then((faces) => normalizeDetectedFaces(faces))
+        .catch((err) => {
+          console.error(err);
+          return STATE.latestFaces;
+        })
+        .then((faces) => {
+          STATE.latestFaces = faces;
+          return faces;
+        })
+        .finally(() => {
+          STATE.faceDetectPending = null;
+        });
+
+      STATE.faceDetectPending = job;
+      return force ? job : STATE.latestFaces;
+    }
+
+    function applyMosaicToFaces(ctx, faces, strength = 1) {
+      if (!faces || !faces.length) return;
+      const canvas = ctx.canvas;
+      const scratch = document.createElement('canvas');
+      const sctx = scratch.getContext('2d');
+
+      faces.forEach((face) => {
+        const padX = face.width * 0.18;
+        const padY = face.height * 0.22;
+        const x = Math.max(0, Math.floor(face.x - padX));
+        const y = Math.max(0, Math.floor(face.y - padY));
+        const w = Math.min(canvas.width - x, Math.ceil(face.width + padX * 2));
+        const h = Math.min(canvas.height - y, Math.ceil(face.height + padY * 2));
+        if (w < 4 || h < 4) return;
+
+        const px = Math.max(6, Math.round(Math.min(w, h) / lerp(10, 6, strength)));
+        const smallW = Math.max(1, Math.round(w / px));
+        const smallH = Math.max(1, Math.round(h / px));
+        scratch.width = smallW;
+        scratch.height = smallH;
+        sctx.imageSmoothingEnabled = true;
+        sctx.clearRect(0, 0, smallW, smallH);
+        sctx.drawImage(canvas, x, y, w, h, 0, 0, smallW, smallH);
+
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(scratch, 0, 0, smallW, smallH, x, y, w, h);
+        ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+        ctx.lineWidth = Math.max(1, canvas.width * 0.0018);
+        ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+        ctx.restore();
+      });
+    }
+
+    function applyVcrPass(ctx, width, height, strength, phase = 0) {
+      const lowCanvas = document.createElement('canvas');
+      lowCanvas.width = Math.max(160, Math.round(width * lerp(0.36, 0.24, strength)));
+      lowCanvas.height = Math.max(120, Math.round(height * lerp(0.36, 0.24, strength)));
+      const lctx = lowCanvas.getContext('2d');
+      lctx.imageSmoothingEnabled = true;
+      lctx.filter = `blur(${Math.max(0.6, width * 0.0012)}px)`;
+      lctx.drawImage(ctx.canvas, 0, 0, lowCanvas.width, lowCanvas.height);
+      lctx.filter = 'none';
+
+      ctx.save();
+      ctx.clearRect(0, 0, width, height);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(lowCanvas, 0, 0, lowCanvas.width, lowCanvas.height, 0, 0, width, height);
+      ctx.restore();
+
+      const bleedCanvas = document.createElement('canvas');
+      bleedCanvas.width = width;
+      bleedCanvas.height = height;
+      const bctx = bleedCanvas.getContext('2d');
+      bctx.filter = `blur(${Math.max(1.2, width * 0.0032)}px)`;
+      bctx.drawImage(ctx.canvas, 0, 0, width, height);
+      bctx.filter = 'none';
+
+      ctx.save();
+      ctx.globalAlpha = 0.14 + strength * 0.12;
+      ctx.drawImage(bleedCanvas, 1 + (phase % 2), 0);
+      ctx.globalAlpha = 0.09 + strength * 0.09;
+      ctx.drawImage(bleedCanvas, -1, 0);
+      ctx.restore();
+
+      const frame = ctx.getImageData(0, 0, width, height);
+      const data = frame.data;
+      for (let y = 0; y < height; y++) {
+        const lineJitter = Math.round(Math.sin((y + phase * 3) * 0.11) * strength * 1.7);
+        const lineNoise = (Math.random() * 2 - 1) * (5 + strength * 10);
+        for (let x = 0; x < width; x++) {
+          const i = ((y * width) + x) * 4;
+          const oddLine = y % 2 === phase % 2;
+          const dim = oddLine ? (0.86 - strength * 0.08) : (0.97 - strength * 0.03);
+          const srcX = Math.max(0, Math.min(width - 1, x + lineJitter));
+          const si = ((y * width) + srcX) * 4;
+
+          let r = data[si] * dim;
+          let g = data[si + 1] * dim;
+          let b = data[si + 2] * dim;
+
+          if (oddLine) {
+            r += 2;
+            b -= 2;
+          }
+
+          const lumaBump = lineNoise + (Math.random() * 2 - 1) * 4;
+          data[i] = clamp(r + lumaBump);
+          data[i + 1] = clamp(g + lumaBump * 0.9);
+          data[i + 2] = clamp(b + lumaBump * 1.15);
+        }
+      }
+      ctx.putImageData(frame, 0, 0);
+
+      ctx.save();
+      ctx.globalAlpha = 0.08 + strength * 0.08;
+      ctx.fillStyle = '#fff';
+      for (let y = 0; y < height; y += 2) {
+        ctx.fillRect(0, y, width, 1);
+      }
+      ctx.restore();
+
+      ctx.save();
+      ctx.globalAlpha = 0.11 + strength * 0.14;
+      const bandY = Math.round(height * 0.92);
+      const grad = ctx.createLinearGradient(0, bandY, 0, height);
+      grad.addColorStop(0, 'rgba(255,255,255,0)');
+      grad.addColorStop(1, 'rgba(255,255,255,1)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, bandY, width, height - bandY);
+      ctx.restore();
+
+      ctx.save();
+      ctx.globalAlpha = 0.22;
+      for (let i = 0; i < 2; i++) {
+        const y = Math.random() * height;
+        const h = Math.max(1, Math.round(height * (0.002 + Math.random() * 0.006)));
+        const grad = ctx.createLinearGradient(0, y, width, y + h);
+        grad.addColorStop(0, 'rgba(255,255,255,0)');
+        grad.addColorStop(0.5, `rgba(255,255,255,${0.25 + Math.random() * 0.25})`);
+        grad.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, y, width, h);
+      }
+      ctx.restore();
+
+      ctx.save();
+      ctx.globalAlpha = 0.14 + strength * 0.08;
+      ctx.fillStyle = 'rgba(0,0,0,0.9)';
+      ctx.fillRect(0, 0, width, Math.max(2, height * 0.01));
+      ctx.fillRect(0, height - Math.max(2, height * 0.012), width, Math.max(2, height * 0.012));
+      ctx.restore();
+    }
+
+    async function processFrame(modeKey, longEdgeCap, options = {}) {
       const sourceWidth = video.videoWidth;
       const sourceHeight = video.videoHeight;
       if (!sourceWidth || !sourceHeight) return null;
@@ -978,7 +1231,7 @@
       const rctx = renderCanvas.getContext('2d', { willReadFrequently: true });
 
       rctx.clearRect(0, 0, renderCanvas.width, renderCanvas.height);
-      downsampleSoft(rctx, sourceCanvas, renderCanvas.width, renderCanvas.height, 0.76);
+      downsampleSoft(rctx, sourceCanvas, renderCanvas.width, renderCanvas.height, modeKey === 'vcr' ? 0.7 : 0.76);
 
       let frame = rctx.getImageData(0, 0, renderCanvas.width, renderCanvas.height);
       frame = primaryColorPass(frame, renderCanvas.width, renderCanvas.height, profile);
@@ -992,6 +1245,16 @@
       blockArtifactsPass(rctx, renderCanvas.width, renderCanvas.height, profile.blockiness);
       drawVignette(rctx, renderCanvas.width, renderCanvas.height, profile.vignette);
       drawSoftEdgeFade(rctx, renderCanvas.width, renderCanvas.height, profile.edgeFade);
+
+      if (modeKey === 'instant' || modeKey === 'instax') {
+        drawAnalogFrameBorder(rctx, renderCanvas.width, renderCanvas.height, modeKey === 'instant' ? 0.17 : 0.12);
+      }
+
+      if (modeKey === 'vcr') {
+        const faces = await detectFacesOnCanvas(sourceCanvas, !!options.forceFaceDetection);
+        applyMosaicToFaces(rctx, faces, 1);
+        applyVcrPass(rctx, renderCanvas.width, renderCanvas.height, profile.vcrStrength, STATE.vcrFieldPhase);
+      }
 
       return {
         canvas: renderCanvas,
@@ -1014,36 +1277,35 @@
       }
     }
 
-    function renderPreview(now = 0) {
-      if (STATE.captured) {
-        STATE.previewRAF = requestAnimationFrame(renderPreview);
-        return;
-      }
+    async function renderPreview(now = 0) {
+      STATE.previewRAF = requestAnimationFrame(renderPreview);
 
-      if (video.readyState < 2) {
-        STATE.previewRAF = requestAnimationFrame(renderPreview);
-        return;
-      }
+      if (STATE.captured || STATE.renderBusy) return;
+      if (video.readyState < 2) return;
 
       const frameInterval = 1000 / STATE.previewFPS;
-      if (now - STATE.lastPreviewTick < frameInterval) {
-        STATE.previewRAF = requestAnimationFrame(renderPreview);
-        return;
-      }
+      if (now - STATE.lastPreviewTick < frameInterval) return;
 
       STATE.lastPreviewTick = now;
+      STATE.renderBusy = true;
       syncPreviewCanvas();
 
-      const mode = MODES[STATE.mode];
-      const result = processFrame(STATE.mode, mode.previewLongEdge);
-      if (result) {
-        const pctx = preview.getContext('2d');
-        pctx.clearRect(0, 0, preview.width, preview.height);
-        pctx.imageSmoothingEnabled = true;
-        pctx.drawImage(result.canvas, 0, 0, preview.width, preview.height);
+      const modeKey = STATE.mode;
+      const mode = MODES[modeKey];
+      try {
+        const result = await processFrame(modeKey, mode.previewLongEdge);
+        if (result && !STATE.captured && modeKey === STATE.mode) {
+          const pctx = preview.getContext('2d');
+          pctx.clearRect(0, 0, preview.width, preview.height);
+          pctx.imageSmoothingEnabled = true;
+          pctx.drawImage(result.canvas, 0, 0, preview.width, preview.height);
+          STATE.vcrFieldPhase = (STATE.vcrFieldPhase + 1) % 2;
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        STATE.renderBusy = false;
       }
-
-      STATE.previewRAF = requestAnimationFrame(renderPreview);
     }
 
     function startPreviewLoop() {
@@ -1052,7 +1314,7 @@
       STATE.previewRAF = requestAnimationFrame(renderPreview);
     }
 
-    function setMode(modeKey) {
+    async function setMode(modeKey) {
       STATE.mode = modeKey;
       const mode = MODES[modeKey];
       modeBadge.textContent = mode.badge;
@@ -1061,13 +1323,24 @@
         button.classList.toggle('active', button.dataset.mode === modeKey);
       });
 
-      if (!STATE.captured && video.readyState >= 2) {
-        const result = processFrame(STATE.mode, mode.previewLongEdge);
-        if (result) {
-          syncPreviewCanvas();
-          const pctx = preview.getContext('2d');
-          pctx.clearRect(0, 0, preview.width, preview.height);
-          pctx.drawImage(result.canvas, 0, 0, preview.width, preview.height);
+      if (modeKey === 'vcr') {
+        await ensureFaceDetector();
+      }
+
+      if (!STATE.captured && video.readyState >= 2 && !STATE.renderBusy) {
+        syncPreviewCanvas();
+        STATE.renderBusy = true;
+        try {
+          const result = await processFrame(STATE.mode, mode.previewLongEdge);
+          if (result && modeKey === STATE.mode && !STATE.captured) {
+            const pctx = preview.getContext('2d');
+            pctx.clearRect(0, 0, preview.width, preview.height);
+            pctx.drawImage(result.canvas, 0, 0, preview.width, preview.height);
+          }
+        } catch (err) {
+          console.error(err);
+        } finally {
+          STATE.renderBusy = false;
         }
       }
     }
@@ -1097,24 +1370,31 @@
       captureBtn.disabled = true;
       showToast('Processing…', true);
 
-      const mode = MODES[STATE.mode];
-      const result = processFrame(STATE.mode, mode.maxLongEdge);
+      const modeKey = STATE.mode;
+      const mode = MODES[modeKey];
 
-      if (!result) {
-        captureBtn.disabled = false;
+      try {
+        const result = await processFrame(modeKey, mode.maxLongEdge, { forceFaceDetection: modeKey === 'vcr' });
+        if (!result) {
+          captureBtn.disabled = false;
+          showToast('Could not capture frame');
+          return;
+        }
+
+        compositeToCanvas(result.canvas, output);
+        preview.style.display = 'none';
+        output.style.display = 'block';
+
+        STATE.captured = true;
+        updateCaptureUi();
+        hideToast();
+        showToast('Tap save to download');
+      } catch (err) {
+        console.error(err);
         showToast('Could not capture frame');
-        return;
+      } finally {
+        captureBtn.disabled = false;
       }
-
-      compositeToCanvas(result.canvas, output);
-      preview.style.display = 'none';
-      output.style.display = 'block';
-
-      STATE.captured = true;
-      updateCaptureUi();
-      hideToast();
-      showToast('Tap save to download');
-      captureBtn.disabled = false;
     }
 
     function retake() {
@@ -1221,14 +1501,8 @@
 
     window.addEventListener('resize', () => {
       syncPreviewCanvas();
-      if (!STATE.captured && video.readyState >= 2) {
-        const mode = MODES[STATE.mode];
-        const result = processFrame(STATE.mode, mode.previewLongEdge);
-        if (result) {
-          const pctx = preview.getContext('2d');
-          pctx.clearRect(0, 0, preview.width, preview.height);
-          pctx.drawImage(result.canvas, 0, 0, preview.width, preview.height);
-        }
+      if (!STATE.captured && video.readyState >= 2 && !STATE.renderBusy) {
+        setMode(STATE.mode);
       }
     });
 
@@ -1241,5 +1515,6 @@
     buildModeButtons();
     startCamera();
   </script>
+
 </body>
 </html>
