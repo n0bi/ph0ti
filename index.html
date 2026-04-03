@@ -315,7 +315,7 @@
   </div>
 
   
-  <script>
+  <script type="module">
     const video = document.getElementById('video');
     const preview = document.getElementById('preview');
     const output = document.getElementById('output');
@@ -1013,13 +1013,17 @@
     }
 
     function normalizeDetectedFaces(faceResults) {
-      return (faceResults || []).map((face) => {
+      const detections = Array.isArray(faceResults)
+        ? faceResults
+        : (faceResults && Array.isArray(faceResults.detections) ? faceResults.detections : []);
+
+      return detections.map((face) => {
         const box = face.boundingBox || face;
         return {
-          x: box.x || 0,
-          y: box.y || 0,
-          width: box.width || 0,
-          height: box.height || 0
+          x: box.originX ?? box.x ?? 0,
+          y: box.originY ?? box.y ?? 0,
+          width: box.width ?? 0,
+          height: box.height ?? 0
         };
       }).filter((box) => box.width > 1 && box.height > 1);
     }
@@ -1027,80 +1031,98 @@
     async function ensureFaceDetector() {
       if (STATE.faceDetectorChecked) return STATE.faceDetector;
       STATE.faceDetectorChecked = true;
-      if ('FaceDetector' in window) {
+
+      try {
+        showToast('Loading face mosaic model…', true);
+        const { FaceDetector: MPFaceDetector, FilesetResolver } = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/+esm');
+        const vision = await FilesetResolver.forVisionTasks(
+          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
+        );
+        STATE.faceDetector = await MPFaceDetector.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite',
+            delegate: 'GPU'
+          },
+          runningMode: 'VIDEO',
+          minDetectionConfidence: 0.42,
+          minSuppressionThreshold: 0.28
+        });
+        STATE.faceDetectorNoticeShown = false;
+        hideToast();
+      } catch (gpuErr) {
+        console.error(gpuErr);
         try {
-          STATE.faceDetector = new FaceDetector({ fastMode: true, maxDetectedFaces: 8 });
-        } catch (err) {
-          try {
-            STATE.faceDetector = new FaceDetector();
-          } catch (err2) {
-            console.error(err2);
-            STATE.faceDetector = null;
+          const { FaceDetector: MPFaceDetector, FilesetResolver } = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/+esm');
+          const vision = await FilesetResolver.forVisionTasks(
+            'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
+          );
+          STATE.faceDetector = await MPFaceDetector.createFromOptions(vision, {
+            baseOptions: {
+              modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite',
+              delegate: 'CPU'
+            },
+            runningMode: 'VIDEO',
+            minDetectionConfidence: 0.42,
+            minSuppressionThreshold: 0.28
+          });
+          STATE.faceDetectorNoticeShown = false;
+          hideToast();
+        } catch (cpuErr) {
+          console.error(cpuErr);
+          STATE.faceDetector = null;
+          if (!STATE.faceDetectorNoticeShown) {
+            STATE.faceDetectorNoticeShown = true;
+            showToast('Face mosaic model could not load', true);
           }
         }
-      } else {
-        STATE.faceDetector = null;
       }
+
       return STATE.faceDetector;
     }
 
-    async function runFaceDetection(detector, sourceCanvas) {
-      let bitmap = null;
-      try {
-        if ('createImageBitmap' in window) {
-          bitmap = await createImageBitmap(sourceCanvas);
-          return await detector.detect(bitmap);
-        }
-        return await detector.detect(sourceCanvas);
-      } finally {
-        if (bitmap && typeof bitmap.close === 'function') {
-          bitmap.close();
-        }
-      }
+    function getDetectionCanvas(sourceCanvas) {
+      const detectCanvas = document.createElement('canvas');
+      const maxLongEdge = 320;
+      const fitted = fitSize(sourceCanvas.width, sourceCanvas.height, maxLongEdge);
+      detectCanvas.width = fitted.width;
+      detectCanvas.height = fitted.height;
+      const dctx = detectCanvas.getContext('2d', { willReadFrequently: false });
+      dctx.imageSmoothingEnabled = true;
+      dctx.drawImage(sourceCanvas, 0, 0, detectCanvas.width, detectCanvas.height);
+      return detectCanvas;
     }
 
     async function detectFacesOnCanvas(sourceCanvas, force = false) {
       const detector = await ensureFaceDetector();
-      if (!detector) {
-        if (STATE.mode === 'vcr' && !STATE.faceDetectorNoticeShown) {
-          STATE.faceDetectorNoticeShown = true;
-          showToast('VCR face mosaic needs FaceDetector support', true);
-        }
-        return STATE.latestFaces;
-      }
+      if (!detector) return STATE.latestFaces;
 
       const now = performance.now();
       if (!force && STATE.faceDetectPending) return STATE.latestFaces;
-      if (!force && now - STATE.lastFaceDetectAt < 220) return STATE.latestFaces;
+      if (!force && now - STATE.lastFaceDetectAt < 240) return STATE.latestFaces;
 
       STATE.lastFaceDetectAt = now;
-      const job = (async () => {
-        try {
-          let faces = [];
-          try {
-            faces = await runFaceDetection(detector, sourceCanvas);
-          } catch (primaryErr) {
-            console.error(primaryErr);
-            try {
-              faces = await detector.detect(sourceCanvas);
-            } catch (fallbackErr) {
-              console.error(fallbackErr);
-              faces = STATE.latestFaces;
-            }
-          }
-          return normalizeDetectedFaces(faces);
-        } catch (err) {
-          console.error(err);
-          return STATE.latestFaces;
-        }
-      })()
-        .then((faces) => {
-          STATE.latestFaces = faces;
-          return faces;
-        })
-        .finally(() => {
-          STATE.faceDetectPending = null;
-        });
+      const scaleX = sourceCanvas.width;
+      const scaleY = sourceCanvas.height;
+      const detectionCanvas = getDetectionCanvas(sourceCanvas);
+      const ratioX = scaleX / detectionCanvas.width;
+      const ratioY = scaleY / detectionCanvas.height;
+
+      const job = Promise.resolve().then(() => {
+        const result = detector.detectForVideo(detectionCanvas, now);
+        const faces = normalizeDetectedFaces(result).map((face) => ({
+          x: face.x * ratioX,
+          y: face.y * ratioY,
+          width: face.width * ratioX,
+          height: face.height * ratioY
+        }));
+        STATE.latestFaces = faces;
+        return faces;
+      }).catch((err) => {
+        console.error(err);
+        return STATE.latestFaces;
+      }).finally(() => {
+        STATE.faceDetectPending = null;
+      });
 
       STATE.faceDetectPending = job;
       return force ? job : STATE.latestFaces;
