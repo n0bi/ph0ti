@@ -6,56 +6,63 @@
   <title>Y2K Digicam Camera</title>
   <style>
     :root {
-      --bg: #0b0b0d;
-      --panel: #151518;
+      --bg: #050507;
+      --panel: rgba(14, 14, 18, 0.9);
       --line: rgba(255,255,255,.08);
       --text: #f5f5f7;
-      --muted: #a0a0aa;
-      --accent: #ffffff;
-      --shadow: 0 20px 60px rgba(0,0,0,.45);
-      --radius: 24px;
+      --muted: rgba(255,255,255,.68);
+      --shadow: 0 24px 60px rgba(0,0,0,.4);
+      --radius: 30px;
+      --button-shadow: 0 12px 30px rgba(0,0,0,.28);
+      --preview-filter: none;
     }
 
     * { box-sizing: border-box; }
+
     html, body {
       margin: 0;
+      width: 100%;
       min-height: 100%;
-      background:
-        radial-gradient(circle at top, rgba(255,255,255,.05), transparent 35%),
-        linear-gradient(180deg, #0f1014, #07080a 70%);
+      background: radial-gradient(circle at top, rgba(255,255,255,.06), transparent 25%), linear-gradient(180deg, #11131a, #050507 72%);
       color: var(--text);
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      overflow: hidden;
     }
 
     body {
-      display: grid;
-      place-items: center;
-      padding: 18px;
+      padding: 10px;
     }
 
     .app {
-      width: min(100%, 540px);
-      display: grid;
-      gap: 14px;
+      width: 100%;
+      min-height: calc(100dvh - 20px);
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
     }
 
     .camera-shell {
-      background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+      width: min(100%, 960px);
+      min-height: 100%;
+      background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.015));
       border: 1px solid var(--line);
-      border-radius: 30px;
+      border-radius: 34px;
       box-shadow: var(--shadow);
-      padding: 14px;
       backdrop-filter: blur(10px);
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
     }
 
     .viewer {
       position: relative;
+      flex: 1 1 auto;
+      min-height: min(72dvh, 920px);
       overflow: hidden;
       border-radius: var(--radius);
-      background: #050505;
-      aspect-ratio: 3 / 4;
-      width: 100%;
-      border: 1px solid rgba(255,255,255,.06);
+      background: #000;
+      border: 1px solid rgba(255,255,255,.08);
     }
 
     video,
@@ -69,105 +76,260 @@
       background: #000;
     }
 
+    video {
+      filter: var(--preview-filter);
+      transition: filter .25s ease, transform .25s ease;
+    }
+
+    .viewer.fisheye-preview video {
+      transform: scale(1.08);
+      filter: var(--preview-filter) contrast(1.06);
+    }
+
+    .viewer::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,0) 16%, rgba(0,0,0,.08) 100%);
+      mix-blend-mode: screen;
+    }
+
+    .viewer.fisheye-preview::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(circle at center, transparent 38%, rgba(0,0,0,.12) 58%, rgba(0,0,0,.42) 100%);
+      z-index: 2;
+    }
+
     #output {
       display: none;
       cursor: pointer;
+      z-index: 1;
     }
 
-    .top-badge,
-    .save-hint,
-    .status {
+    .hud {
       position: absolute;
-      z-index: 5;
-      background: rgba(0,0,0,.44);
-      color: rgba(255,255,255,.94);
-      border: 1px solid rgba(255,255,255,.08);
+      inset: 0;
+      z-index: 4;
+      pointer-events: none;
+    }
+
+    .mode-badge,
+    .icon-btn,
+    .toast {
+      position: absolute;
       backdrop-filter: blur(8px);
-      box-shadow: 0 12px 30px rgba(0,0,0,.22);
+      border: 1px solid rgba(255,255,255,.1);
+      box-shadow: 0 10px 30px rgba(0,0,0,.24);
+      background: rgba(0,0,0,.4);
+      color: rgba(255,255,255,.96);
     }
 
-    .top-badge {
-      top: 12px;
+    .mode-badge {
       left: 12px;
-      padding: 8px 10px;
+      top: 12px;
       border-radius: 999px;
+      padding: 9px 12px;
       font-size: 12px;
-      letter-spacing: .03em;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      line-height: 1;
     }
 
-    .save-hint {
+    .icon-btn {
+      right: 12px;
+      top: 12px;
+      width: 44px;
+      height: 44px;
+      border-radius: 999px;
+      pointer-events: auto;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      appearance: none;
+      font: inherit;
+    }
+
+    .icon-btn:active { transform: scale(.98); }
+
+    .icon-btn svg {
+      width: 18px;
+      height: 18px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .toast {
       left: 50%;
       bottom: 14px;
       transform: translateX(-50%);
-      padding: 8px 12px;
       border-radius: 999px;
+      padding: 9px 12px;
       font-size: 12px;
-      display: none;
       white-space: nowrap;
-    }
-
-    .status {
-      right: 12px;
-      top: 12px;
-      padding: 8px 10px;
-      border-radius: 999px;
-      font-size: 12px;
-      color: var(--muted);
+      display: none;
       max-width: calc(100% - 24px);
-      text-align: right;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 2px 2px 4px;
+    }
+
+    .mode-row {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      padding-bottom: 2px;
+    }
+
+    .mode-row::-webkit-scrollbar { display: none; }
+
+    .mode-chip,
+    .pill-btn {
+      appearance: none;
+      border: 1px solid rgba(255,255,255,.1);
+      background: rgba(255,255,255,.06);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 12px 14px;
+      font: inherit;
+      cursor: pointer;
+      transition: transform .15s ease, background .15s ease, border-color .15s ease, opacity .15s ease;
+      white-space: nowrap;
+      box-shadow: var(--button-shadow);
+    }
+
+    .mode-chip:active,
+    .pill-btn:active { transform: scale(.98); }
+
+    .mode-chip.active {
+      background: rgba(255,255,255,.16);
+      border-color: rgba(255,255,255,.22);
+    }
+
+    .capture-row {
+      min-height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .capture-btn {
+      appearance: none;
+      width: 74px;
+      height: 74px;
+      border-radius: 999px;
+      border: 4px solid rgba(255,255,255,.9);
+      background: transparent;
+      padding: 0;
       display: grid;
       place-items: center;
-      padding: 10px 2px 0;
-    }
-
-    button {
-      appearance: none;
-      border: none;
-      border-radius: 999px;
-      background: var(--accent);
-      color: #111;
-      font: inherit;
-      font-weight: 700;
-      padding: 16px 28px;
-      min-width: 180px;
       cursor: pointer;
+      box-shadow: var(--button-shadow);
       transition: transform .15s ease, opacity .15s ease;
-      box-shadow: 0 12px 28px rgba(0,0,0,.26);
     }
 
-    button:active { transform: scale(.98); }
-    button:disabled { opacity: .55; cursor: wait; }
+    .capture-btn::before {
+      content: "";
+      width: 54px;
+      height: 54px;
+      border-radius: 999px;
+      background: #ff3b30;
+      box-shadow: inset 0 -10px 16px rgba(0,0,0,.14), inset 0 10px 14px rgba(255,255,255,.14);
+    }
 
-    .note {
+    .capture-btn:active { transform: scale(.97); }
+    .capture-btn:disabled { opacity: .55; cursor: wait; }
+
+    .capture-actions {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+    }
+
+    .capture-actions.show { display: flex; }
+
+    .hidden { display: none !important; }
+
+    .subtle {
       color: var(--muted);
-      text-align: center;
-      font-size: 13px;
-      line-height: 1.45;
-      padding: 0 10px;
     }
 
-    .note strong { color: var(--text); font-weight: 600; }
+    @media (max-width: 720px) {
+      body { padding: 0; }
+      .app { min-height: 100dvh; }
+      .camera-shell {
+        width: 100%;
+        border-radius: 0;
+        min-height: 100dvh;
+        padding: 8px;
+      }
+      .viewer {
+        min-height: calc(100dvh - 158px);
+        border-radius: 24px;
+      }
+      .mode-chip,
+      .pill-btn {
+        padding: 11px 13px;
+        font-size: 14px;
+      }
+      .capture-btn {
+        width: 76px;
+        height: 76px;
+      }
+      .capture-btn::before {
+        width: 56px;
+        height: 56px;
+      }
+    }
   </style>
 </head>
 <body>
-  <div class="app">
-    <div class="camera-shell">
-      <div class="viewer">
-        <div class="top-badge">Y2K digicam mode</div>
-        <div id="status" class="status">Starting camera…</div>
-        <div id="saveHint" class="save-hint">Tap the photo to save it</div>
+  <div class="app" id="appRoot">
+    <div class="camera-shell" id="cameraShell">
+      <div class="viewer" id="viewer">
         <video id="video" autoplay playsinline muted></video>
         <canvas id="output"></canvas>
+        <div class="hud">
+          <div id="modeBadge" class="mode-badge">Disposable flash</div>
+          <button id="fullscreenBtn" class="icon-btn" type="button" aria-label="Toggle fullscreen">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M8 3H3v5"></path>
+              <path d="M16 3h5v5"></path>
+              <path d="M21 16v5h-5"></path>
+              <path d="M8 21H3v-5"></path>
+            </svg>
+          </button>
+          <div id="toast" class="toast"></div>
+        </div>
       </div>
+
       <div class="controls">
-        <button id="captureBtn" disabled>Capture</button>
+        <div class="mode-row" id="modeRow" aria-label="Camera looks"></div>
+
+        <div class="capture-row">
+          <button id="captureBtn" class="capture-btn" type="button" aria-label="Capture photo" disabled></button>
+          <div id="captureActions" class="capture-actions" aria-live="polite">
+            <button id="retakeBtn" class="pill-btn" type="button">Retake</button>
+            <button id="saveBtn" class="pill-btn" type="button">Save</button>
+          </div>
+        </div>
       </div>
-    </div>
-    <div class="note">
-      One self-contained HTML file. Tap <strong>Capture</strong> to freeze and process the frame. Tap the final image to save it. Tap <strong>Retake</strong> to go back to live preview.
     </div>
   </div>
 
@@ -175,77 +337,164 @@
     const video = document.getElementById('video');
     const output = document.getElementById('output');
     const captureBtn = document.getElementById('captureBtn');
-    const statusEl = document.getElementById('status');
-    const saveHint = document.getElementById('saveHint');
+    const retakeBtn = document.getElementById('retakeBtn');
+    const saveBtn = document.getElementById('saveBtn');
+    const captureActions = document.getElementById('captureActions');
+    const viewer = document.getElementById('viewer');
+    const modeBadge = document.getElementById('modeBadge');
+    const modeRow = document.getElementById('modeRow');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    const toast = document.getElementById('toast');
+    const appRoot = document.getElementById('appRoot');
 
     let stream = null;
     let captured = false;
     let lastBlobUrl = '';
+    let toastTimer = 0;
 
-    const SETTINGS = {
-      maxLongEdge: 1400,
-      outputQuality: 0.92,
-      workingJPEGQualityDay: 0.48,
-      workingJPEGQualityNight: 0.40,
-      dateStamp: false
+    const MODES = {
+      disposable: {
+        label: 'Disposable flash',
+        previewFilter: 'contrast(1.06) saturate(1.08) brightness(1.02) sepia(.08)',
+        maxLongEdge: 1380,
+        jpegQualityDay: 0.5,
+        jpegQualityNight: 0.38,
+        outputQuality: 0.9,
+        base: {
+          contrast: [1.02, 1.14],
+          exposure: [1.06, 1.18],
+          saturation: [1.0, 1.12],
+          warmthR: [1.03, 1.12],
+          warmthG: [0.99, 1.04],
+          warmthB: [0.9, 0.98],
+          blackLift: [8, 18],
+          highlightPush: [0.2, 0.32],
+          noise: [12, 22],
+          colorNoise: [6, 12],
+          vignette: [0.14, 0.22],
+          hotspot: [0.12, 0.24],
+          chromaShift: [1.0, 1.7],
+          sharpen: [0.08, 0.16],
+          flashBloom: [0.18, 0.32],
+          coolBoost: [0.0, 0.0],
+          magentaBoost: [0.0, 0.0],
+          barrel: 0
+        }
+      },
+      ccd: {
+        label: 'CCD digicam daylight',
+        previewFilter: 'contrast(0.98) saturate(0.94) brightness(1.05) hue-rotate(-3deg)',
+        maxLongEdge: 1440,
+        jpegQualityDay: 0.56,
+        jpegQualityNight: 0.42,
+        outputQuality: 0.92,
+        base: {
+          contrast: [0.9, 1.0],
+          exposure: [1.02, 1.08],
+          saturation: [0.86, 0.96],
+          warmthR: [0.95, 1.0],
+          warmthG: [1.0, 1.05],
+          warmthB: [1.03, 1.12],
+          blackLift: [9, 16],
+          highlightPush: [0.08, 0.14],
+          noise: [7, 13],
+          colorNoise: [3, 7],
+          vignette: [0.08, 0.14],
+          hotspot: [0.02, 0.05],
+          chromaShift: [0.7, 1.2],
+          sharpen: [0.11, 0.19],
+          flashBloom: [0.0, 0.02],
+          coolBoost: [2, 8],
+          magentaBoost: [0.0, 0.0],
+          barrel: 0
+        }
+      },
+      fisheye: {
+        label: 'Fisheye Y2K club',
+        previewFilter: 'contrast(1.08) saturate(1.14) brightness(1.02) hue-rotate(5deg)',
+        maxLongEdge: 1280,
+        jpegQualityDay: 0.44,
+        jpegQualityNight: 0.34,
+        outputQuality: 0.89,
+        base: {
+          contrast: [1.04, 1.18],
+          exposure: [1.04, 1.16],
+          saturation: [1.02, 1.14],
+          warmthR: [1.01, 1.08],
+          warmthG: [0.95, 1.02],
+          warmthB: [0.96, 1.04],
+          blackLift: [10, 18],
+          highlightPush: [0.18, 0.28],
+          noise: [14, 24],
+          colorNoise: [6, 12],
+          vignette: [0.2, 0.32],
+          hotspot: [0.08, 0.18],
+          chromaShift: [1.4, 2.2],
+          sharpen: [0.08, 0.15],
+          flashBloom: [0.08, 0.16],
+          coolBoost: [0.0, 3.0],
+          magentaBoost: [4.0, 10.0],
+          barrel: 0.22
+        }
+      }
     };
 
-    function setStatus(text) {
-      statusEl.textContent = text;
+    const STATE = {
+      mode: 'disposable'
+    };
+
+    function rand(min, max) {
+      return Math.random() * (max - min) + min;
     }
 
     function clamp(v, min = 0, max = 255) {
       return Math.max(min, Math.min(max, v));
     }
 
-    function rand(min, max) {
-      return Math.random() * (max - min) + min;
+    function showToast(message, sticky = false) {
+      toast.textContent = message;
+      toast.style.display = 'block';
+      clearTimeout(toastTimer);
+      if (!sticky) {
+        toastTimer = window.setTimeout(() => {
+          toast.style.display = 'none';
+        }, 1800);
+      }
     }
 
-    function formatTimestamp() {
-      const d = new Date();
-      const y = String(d.getFullYear()).slice(-2);
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${m}/${day}/${y}`;
+    function hideToast() {
+      clearTimeout(toastTimer);
+      toast.style.display = 'none';
     }
 
-    async function startCamera() {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setStatus('Camera API not available in this browser');
-        return;
-      }
+    function setMode(modeKey) {
+      STATE.mode = modeKey;
+      const mode = MODES[modeKey];
+      modeBadge.textContent = mode.label;
+      document.documentElement.style.setProperty('--preview-filter', mode.previewFilter);
+      viewer.classList.toggle('fisheye-preview', modeKey === 'fisheye');
 
-      const preferred = {
-        audio: false,
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1920 },
-          height: { ideal: 1440 }
-        }
-      };
+      Array.from(modeRow.querySelectorAll('.mode-chip')).forEach((button) => {
+        button.classList.toggle('active', button.dataset.mode === modeKey);
+      });
+    }
 
-      const fallback = {
-        audio: false,
-        video: true
-      };
-
-      try {
-        stream = await navigator.mediaDevices.getUserMedia(preferred);
-      } catch (err) {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia(fallback);
-        } catch (err2) {
-          console.error(err2);
-          setStatus('Camera permission denied or no camera found');
-          return;
-        }
-      }
-
-      video.srcObject = stream;
-      await video.play();
-      captureBtn.disabled = false;
-      setStatus('Live preview');
+    function buildModeButtons() {
+      const fragment = document.createDocumentFragment();
+      Object.entries(MODES).forEach(([key, value]) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'mode-chip';
+        button.textContent = value.label;
+        button.dataset.mode = key;
+        button.addEventListener('click', () => {
+          if (captured) return;
+          setMode(key);
+        });
+        fragment.appendChild(button);
+      });
+      modeRow.appendChild(fragment);
+      setMode(STATE.mode);
     }
 
     function fitSize(w, h, maxLongEdge) {
@@ -280,34 +529,104 @@
       };
     }
 
-    function getProfile(stats) {
-      const lowLight = stats.luminance < 95;
+    function ranged(profile, key) {
+      const [min, max] = profile.base[key];
+      return rand(min, max);
+    }
+
+    function getProfile(modeKey, stats) {
+      const mode = MODES[modeKey];
+      const lowLight = stats.luminance < 96;
+      const baseContrast = ranged(mode, 'contrast');
+      const baseExposure = ranged(mode, 'exposure');
+      const baseSat = ranged(mode, 'saturation');
 
       return {
         lowLight,
-        contrast: lowLight ? rand(1.02, 1.08) : rand(0.92, 1.00),
-        exposure: lowLight ? rand(1.08, 1.18) : rand(0.98, 1.05),
-        saturation: lowLight ? rand(1.04, 1.14) : rand(0.88, 0.97),
-        warmthR: lowLight ? rand(1.02, 1.10) : rand(0.96, 1.02),
-        warmthG: lowLight ? rand(0.97, 1.02) : rand(1.00, 1.05),
-        warmthB: lowLight ? rand(0.90, 0.98) : rand(1.02, 1.08),
-        blackLift: lowLight ? rand(4, 10) : rand(8, 15),
-        highlightPush: lowLight ? rand(0.16, 0.24) : rand(0.08, 0.14),
-        noise: lowLight ? rand(14, 22) : rand(8, 14),
-        colorNoise: lowLight ? rand(6, 12) : rand(4, 8),
-        vignette: lowLight ? rand(0.18, 0.28) : rand(0.10, 0.18),
-        hotspot: lowLight ? rand(0.12, 0.22) : rand(0.03, 0.08),
-        chromaShift: lowLight ? rand(1.2, 1.8) : rand(0.8, 1.3),
-        jpegQuality: lowLight ? SETTINGS.workingJPEGQualityNight : SETTINGS.workingJPEGQualityDay,
-        sharpen: lowLight ? rand(0.10, 0.18) : rand(0.06, 0.12)
+        contrast: lowLight ? baseContrast + 0.03 : baseContrast,
+        exposure: lowLight ? baseExposure + 0.08 : baseExposure,
+        saturation: lowLight ? baseSat + 0.05 : baseSat,
+        warmthR: ranged(mode, 'warmthR'),
+        warmthG: ranged(mode, 'warmthG'),
+        warmthB: ranged(mode, 'warmthB'),
+        blackLift: ranged(mode, 'blackLift'),
+        highlightPush: ranged(mode, 'highlightPush'),
+        noise: lowLight ? ranged(mode, 'noise') + 3 : ranged(mode, 'noise'),
+        colorNoise: lowLight ? ranged(mode, 'colorNoise') + 1 : ranged(mode, 'colorNoise'),
+        vignette: ranged(mode, 'vignette'),
+        hotspot: lowLight ? ranged(mode, 'hotspot') + 0.04 : ranged(mode, 'hotspot'),
+        chromaShift: ranged(mode, 'chromaShift'),
+        jpegQuality: lowLight ? mode.jpegQualityNight : mode.jpegQualityDay,
+        sharpen: ranged(mode, 'sharpen'),
+        flashBloom: ranged(mode, 'flashBloom'),
+        coolBoost: ranged(mode, 'coolBoost'),
+        magentaBoost: ranged(mode, 'magentaBoost'),
+        barrel: mode.base.barrel,
+        outputQuality: mode.outputQuality,
+        modeLabel: mode.label
       };
+    }
+
+    function drawSourceFrame(canvas, width, height) {
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(video, 0, 0, width, height);
+      return ctx;
+    }
+
+    function applyBarrelWarp(sourceCanvas, amount) {
+      if (!amount) return sourceCanvas;
+
+      const width = sourceCanvas.width;
+      const height = sourceCanvas.height;
+      const srcCtx = sourceCanvas.getContext('2d', { willReadFrequently: true });
+      const srcFrame = srcCtx.getImageData(0, 0, width, height);
+      const src = srcFrame.data;
+
+      const warpedCanvas = document.createElement('canvas');
+      warpedCanvas.width = width;
+      warpedCanvas.height = height;
+      const dstCtx = warpedCanvas.getContext('2d', { willReadFrequently: true });
+      const dstFrame = dstCtx.createImageData(width, height);
+      const dst = dstFrame.data;
+
+      const cx = width / 2;
+      const cy = height / 2;
+      const maxRadius = Math.sqrt(cx * cx + cy * cy);
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const dx = (x - cx) / maxRadius;
+          const dy = (y - cy) / maxRadius;
+          const r2 = dx * dx + dy * dy;
+          const factor = 1 - amount * r2;
+          const sx = Math.round(cx + (x - cx) * factor);
+          const sy = Math.round(cy + (y - cy) * factor);
+          const di = ((y * width) + x) * 4;
+
+          if (sx < 0 || sy < 0 || sx >= width || sy >= height) {
+            dst[di + 3] = 255;
+            continue;
+          }
+
+          const si = ((sy * width) + sx) * 4;
+          dst[di] = src[si];
+          dst[di + 1] = src[si + 1];
+          dst[di + 2] = src[si + 2];
+          dst[di + 3] = 255;
+        }
+      }
+
+      dstCtx.putImageData(dstFrame, 0, 0);
+      return warpedCanvas;
     }
 
     function downsampleSoft(ctx, sourceCanvas, width, height) {
       const softCanvas = document.createElement('canvas');
-      softCanvas.width = Math.max(1, Math.round(width * 0.72));
-      softCanvas.height = Math.max(1, Math.round(height * 0.72));
-      const softCtx = softCanvas.getContext('2d', { willReadFrequently: true });
+      softCanvas.width = Math.max(1, Math.round(width * 0.74));
+      softCanvas.height = Math.max(1, Math.round(height * 0.74));
+      const softCtx = softCanvas.getContext('2d');
       softCtx.drawImage(sourceCanvas, 0, 0, softCanvas.width, softCanvas.height);
       ctx.drawImage(softCanvas, 0, 0, softCanvas.width, softCanvas.height, 0, 0, width, height);
     }
@@ -338,16 +657,16 @@
         g = (g - 128) * profile.saturation + 128;
         b = (b - 128) * profile.saturation + 128;
 
-        r = r * profile.warmthR + profile.blackLift;
-        g = g * profile.warmthG + profile.blackLift;
-        b = b * profile.warmthB + profile.blackLift;
+        r = r * profile.warmthR + profile.blackLift + profile.magentaBoost;
+        g = g * profile.warmthG + profile.blackLift * 0.85;
+        b = b * profile.warmthB + profile.blackLift + profile.coolBoost;
 
         const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        const hot = profile.hotspot * Math.pow(1 - radial, 2.7);
-        const vig = 1 - profile.vignette * Math.pow(radial, 1.9);
+        const hot = profile.hotspot * Math.pow(1 - radial, 2.4);
+        const vig = 1 - profile.vignette * Math.pow(radial, 1.85);
 
-        if (luma > 170) {
-          const bump = (luma - 170) * profile.highlightPush;
+        if (luma > 168) {
+          const bump = (luma - 168) * profile.highlightPush;
           r += bump;
           g += bump;
           b += bump;
@@ -359,8 +678,8 @@
         const cNoiseB = rand(-profile.colorNoise, profile.colorNoise);
 
         r = (r + monoNoise + cNoiseR) * vig + hot * 255;
-        g = (g + monoNoise + cNoiseG) * vig + hot * 250;
-        b = (b + monoNoise + cNoiseB) * vig + hot * 240;
+        g = (g + monoNoise + cNoiseG) * vig + hot * 248;
+        b = (b + monoNoise + cNoiseB) * vig + hot * 244;
 
         data[i] = clamp(r);
         data[i + 1] = clamp(g);
@@ -376,7 +695,6 @@
       const cx = width / 2;
       const cy = height / 2;
       const maxDist = Math.sqrt(cx * cx + cy * cy);
-
       const index = (x, y) => ((y * width) + x) * 4;
 
       for (let y = 0; y < height; y++) {
@@ -384,7 +702,7 @@
           const dx = x - cx;
           const dy = y - cy;
           const dist = Math.sqrt(dx * dx + dy * dy) / maxDist;
-          if (dist < 0.28) continue;
+          if (dist < 0.22) continue;
 
           const shift = Math.max(0, Math.round(profile.chromaShift * dist));
           const rx = Math.max(0, Math.min(width - 1, x + Math.sign(dx) * shift));
@@ -402,6 +720,23 @@
       }
 
       return imageData;
+    }
+
+    function flashBloomPass(ctx, width, height, amount) {
+      if (amount <= 0.01) return;
+
+      const bloomCanvas = document.createElement('canvas');
+      bloomCanvas.width = Math.max(1, Math.round(width * 0.28));
+      bloomCanvas.height = Math.max(1, Math.round(height * 0.28));
+      const bctx = bloomCanvas.getContext('2d');
+      bctx.filter = `blur(${Math.max(8, Math.round(width * 0.014))}px) brightness(${1 + amount * 1.8})`;
+      bctx.drawImage(ctx.canvas, 0, 0, bloomCanvas.width, bloomCanvas.height);
+
+      ctx.save();
+      ctx.globalAlpha = 0.22 + amount * 0.35;
+      ctx.filter = `blur(${Math.max(8, Math.round(width * 0.006))}px)`;
+      ctx.drawImage(bloomCanvas, 0, 0, bloomCanvas.width, bloomCanvas.height, 0, 0, width, height);
+      ctx.restore();
     }
 
     function sharpenPass(ctx, width, height, amount) {
@@ -433,6 +768,7 @@
 
     async function jpegCrunch(canvas, quality) {
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
+      if (!blob) return;
       const img = await createImageBitmap(blob);
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -440,17 +776,14 @@
       img.close();
     }
 
-    function addDateStamp(ctx, width, height) {
-      const stamp = formatTimestamp();
-      const size = Math.max(16, Math.round(width * 0.028));
+    function drawVignette(ctx, width, height, strength) {
+      const gradient = ctx.createRadialGradient(width / 2, height / 2, Math.min(width, height) * 0.18, width / 2, height / 2, Math.max(width, height) * 0.72);
+      gradient.addColorStop(0, 'rgba(0,0,0,0)');
+      gradient.addColorStop(0.65, `rgba(0,0,0,${strength * 0.12})`);
+      gradient.addColorStop(1, `rgba(0,0,0,${strength * 0.46})`);
       ctx.save();
-      ctx.font = `bold ${size}px Arial, Helvetica, sans-serif`;
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'bottom';
-      ctx.fillStyle = 'rgba(255, 170, 50, 0.88)';
-      ctx.shadowColor = 'rgba(0,0,0,0.55)';
-      ctx.shadowBlur = 4;
-      ctx.fillText(stamp, width - size, height - size * 0.75);
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, height);
       ctx.restore();
     }
 
@@ -459,63 +792,64 @@
       const vh = video.videoHeight;
       if (!vw || !vh) return;
 
-      setStatus('Processing…');
       captureBtn.disabled = true;
+      showToast('Processing…', true);
 
-      const fitted = fitSize(vw, vh, SETTINGS.maxLongEdge);
+      const mode = MODES[STATE.mode];
+      const fitted = fitSize(vw, vh, mode.maxLongEdge);
+      let sourceCanvas = document.createElement('canvas');
+      let sourceCtx = drawSourceFrame(sourceCanvas, fitted.width, fitted.height);
 
-      const sourceCanvas = document.createElement('canvas');
-      sourceCanvas.width = fitted.width;
-      sourceCanvas.height = fitted.height;
-      const sctx = sourceCanvas.getContext('2d', { willReadFrequently: true });
-      sctx.drawImage(video, 0, 0, sourceCanvas.width, sourceCanvas.height);
+      if (STATE.mode === 'fisheye') {
+        sourceCanvas = applyBarrelWarp(sourceCanvas, mode.base.barrel);
+        sourceCtx = sourceCanvas.getContext('2d', { willReadFrequently: true });
+      }
 
-      const scan = sctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+      const scan = sourceCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
       const stats = sceneStats(scan.data);
-      const profile = getProfile(stats);
+      const profile = getProfile(STATE.mode, stats);
 
       output.width = sourceCanvas.width;
       output.height = sourceCanvas.height;
       const octx = output.getContext('2d', { willReadFrequently: true });
+
+      octx.clearRect(0, 0, output.width, output.height);
       downsampleSoft(octx, sourceCanvas, output.width, output.height);
 
       let frame = octx.getImageData(0, 0, output.width, output.height);
       frame = primaryColorPass(frame, output.width, output.height, profile);
       frame = chromaticAberrationPass(frame, output.width, output.height, profile);
       octx.putImageData(frame, 0, 0);
-      sharpenPass(octx, output.width, output.height, profile.sharpen);
-      await jpegCrunch(output, profile.jpegQuality);
 
-      if (SETTINGS.dateStamp) {
-        const finalCtx = output.getContext('2d');
-        addDateStamp(finalCtx, output.width, output.height);
-      }
+      flashBloomPass(octx, output.width, output.height, profile.flashBloom);
+      sharpenPass(octx, output.width, output.height, profile.sharpen);
+      drawVignette(octx, output.width, output.height, profile.vignette);
+      await jpegCrunch(output, profile.jpegQuality);
 
       video.style.display = 'none';
       output.style.display = 'block';
-      saveHint.style.display = 'block';
       captured = true;
-      captureBtn.textContent = 'Retake';
+      captureBtn.classList.add('hidden');
+      captureActions.classList.add('show');
+      hideToast();
+      showToast('Tap save to download');
+      modeBadge.textContent = profile.modeLabel;
       captureBtn.disabled = false;
-      setStatus(profile.lowLight ? 'Flashy night profile' : 'Daylight digicam profile');
-
-      if (lastBlobUrl) {
-        URL.revokeObjectURL(lastBlobUrl);
-        lastBlobUrl = '';
-      }
     }
 
     function retake() {
       output.style.display = 'none';
       video.style.display = 'block';
-      saveHint.style.display = 'none';
       captured = false;
-      captureBtn.textContent = 'Capture';
-      setStatus('Live preview');
+      captureActions.classList.remove('show');
+      captureBtn.classList.remove('hidden');
+      hideToast();
+      setMode(STATE.mode);
     }
 
     async function saveCurrentImage() {
-      const blob = await new Promise(resolve => output.toBlob(resolve, 'image/jpeg', SETTINGS.outputQuality));
+      const quality = MODES[STATE.mode].outputQuality;
+      const blob = await new Promise(resolve => output.toBlob(resolve, 'image/jpeg', quality));
       if (!blob) return;
 
       if (lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
@@ -523,31 +857,91 @@
 
       const a = document.createElement('a');
       a.href = lastBlobUrl;
-      a.download = `digicam_${Date.now()}.jpg`;
+      a.download = `${STATE.mode}_${Date.now()}.jpg`;
       document.body.appendChild(a);
       a.click();
       a.remove();
+      showToast('Saved');
+    }
+
+    async function startCamera() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showToast('Camera not available in this browser', true);
+        return;
+      }
+
+      const preferred = {
+        audio: false,
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1920 },
+          height: { ideal: 1440 }
+        }
+      };
+
+      const fallback = {
+        audio: false,
+        video: true
+      };
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(preferred);
+      } catch (err) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(fallback);
+        } catch (err2) {
+          console.error(err2);
+          showToast('Camera permission denied or no camera found', true);
+          return;
+        }
+      }
+
+      video.srcObject = stream;
+
+      try {
+        await video.play();
+      } catch (err) {
+        console.error(err);
+        showToast('Could not start camera preview', true);
+        return;
+      }
+
+      captureBtn.disabled = false;
+      hideToast();
+    }
+
+    async function toggleFullscreen() {
+      try {
+        if (document.fullscreenElement) {
+          await document.exitFullscreen();
+        } else {
+          await appRoot.requestFullscreen();
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('Fullscreen blocked by this browser');
+      }
     }
 
     captureBtn.addEventListener('click', async () => {
-      if (!captured) {
-        await processFrame();
-      } else {
-        retake();
-      }
+      if (captured) return;
+      await processFrame();
     });
 
-    output.addEventListener('click', () => {
-      saveCurrentImage();
+    retakeBtn.addEventListener('click', retake);
+    saveBtn.addEventListener('click', saveCurrentImage);
+    fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+    document.addEventListener('fullscreenchange', () => {
+      fullscreenBtn.style.opacity = document.fullscreenElement ? '0.92' : '1';
     });
 
     window.addEventListener('beforeunload', () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
+      if (stream) stream.getTracks().forEach(track => track.stop());
       if (lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
     });
 
+    buildModeButtons();
     startCamera();
   </script>
 </body>
