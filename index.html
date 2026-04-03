@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Y2K Digicam Camera</title>
+  <style>
+    :root {
+      --bg: #0b0b0d;
+      --panel: #151518;
+      --line: rgba(255,255,255,.08);
+      --text: #f5f5f7;
+      --muted: #a0a0aa;
+      --accent: #ffffff;
+      --shadow: 0 20px 60px rgba(0,0,0,.45);
+      --radius: 24px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(circle at top, rgba(255,255,255,.05), transparent 35%),
+        linear-gradient(180deg, #0f1014, #07080a 70%);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+      padding: 18px;
+    }
+
+    .app {
+      width: min(100%, 540px);
+      display: grid;
+      gap: 14px;
+    }
+
+    .camera-shell {
+      background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+      border: 1px solid var(--line);
+      border-radius: 30px;
+      box-shadow: var(--shadow);
+      padding: 14px;
+      backdrop-filter: blur(10px);
+    }
+
+    .viewer {
+      position: relative;
+      overflow: hidden;
+      border-radius: var(--radius);
+      background: #050505;
+      aspect-ratio: 3 / 4;
+      width: 100%;
+      border: 1px solid rgba(255,255,255,.06);
+    }
+
+    video,
+    canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      background: #000;
+    }
+
+    #output {
+      display: none;
+      cursor: pointer;
+    }
+
+    .top-badge,
+    .save-hint,
+    .status {
+      position: absolute;
+      z-index: 5;
+      background: rgba(0,0,0,.44);
+      color: rgba(255,255,255,.94);
+      border: 1px solid rgba(255,255,255,.08);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 12px 30px rgba(0,0,0,.22);
+    }
+
+    .top-badge {
+      top: 12px;
+      left: 12px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      letter-spacing: .03em;
+    }
+
+    .save-hint {
+      left: 50%;
+      bottom: 14px;
+      transform: translateX(-50%);
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      display: none;
+      white-space: nowrap;
+    }
+
+    .status {
+      right: 12px;
+      top: 12px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      color: var(--muted);
+      max-width: calc(100% - 24px);
+      text-align: right;
+    }
+
+    .controls {
+      display: grid;
+      place-items: center;
+      padding: 10px 2px 0;
+    }
+
+    button {
+      appearance: none;
+      border: none;
+      border-radius: 999px;
+      background: var(--accent);
+      color: #111;
+      font: inherit;
+      font-weight: 700;
+      padding: 16px 28px;
+      min-width: 180px;
+      cursor: pointer;
+      transition: transform .15s ease, opacity .15s ease;
+      box-shadow: 0 12px 28px rgba(0,0,0,.26);
+    }
+
+    button:active { transform: scale(.98); }
+    button:disabled { opacity: .55; cursor: wait; }
+
+    .note {
+      color: var(--muted);
+      text-align: center;
+      font-size: 13px;
+      line-height: 1.45;
+      padding: 0 10px;
+    }
+
+    .note strong { color: var(--text); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="camera-shell">
+      <div class="viewer">
+        <div class="top-badge">Y2K digicam mode</div>
+        <div id="status" class="status">Starting camera…</div>
+        <div id="saveHint" class="save-hint">Tap the photo to save it</div>
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="output"></canvas>
+      </div>
+      <div class="controls">
+        <button id="captureBtn" disabled>Capture</button>
+      </div>
+    </div>
+    <div class="note">
+      One self-contained HTML file. Tap <strong>Capture</strong> to freeze and process the frame. Tap the final image to save it. Tap <strong>Retake</strong> to go back to live preview.
+    </div>
+  </div>
+
+  <script>
+    const video = document.getElementById('video');
+    const output = document.getElementById('output');
+    const captureBtn = document.getElementById('captureBtn');
+    const statusEl = document.getElementById('status');
+    const saveHint = document.getElementById('saveHint');
+
+    let stream = null;
+    let captured = false;
+    let lastBlobUrl = '';
+
+    const SETTINGS = {
+      maxLongEdge: 1400,
+      outputQuality: 0.92,
+      workingJPEGQualityDay: 0.48,
+      workingJPEGQualityNight: 0.40,
+      dateStamp: false
+    };
+
+    function setStatus(text) {
+      statusEl.textContent = text;
+    }
+
+    function clamp(v, min = 0, max = 255) {
+      return Math.max(min, Math.min(max, v));
+    }
+
+    function rand(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+
+    function formatTimestamp() {
+      const d = new Date();
+      const y = String(d.getFullYear()).slice(-2);
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${m}/${day}/${y}`;
+    }
+
+    async function startCamera() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setStatus('Camera API not available in this browser');
+        return;
+      }
+
+      const preferred = {
+        audio: false,
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1920 },
+          height: { ideal: 1440 }
+        }
+      };
+
+      const fallback = {
+        audio: false,
+        video: true
+      };
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(preferred);
+      } catch (err) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(fallback);
+        } catch (err2) {
+          console.error(err2);
+          setStatus('Camera permission denied or no camera found');
+          return;
+        }
+      }
+
+      video.srcObject = stream;
+      await video.play();
+      captureBtn.disabled = false;
+      setStatus('Live preview');
+    }
+
+    function fitSize(w, h, maxLongEdge) {
+      const longEdge = Math.max(w, h);
+      if (longEdge <= maxLongEdge) return { width: w, height: h };
+      const scale = maxLongEdge / longEdge;
+      return {
+        width: Math.round(w * scale),
+        height: Math.round(h * scale)
+      };
+    }
+
+    function sceneStats(data) {
+      let lum = 0;
+      let sat = 0;
+      let samples = 0;
+
+      for (let i = 0; i < data.length; i += 32) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        lum += 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        sat += max === 0 ? 0 : (max - min) / max;
+        samples++;
+      }
+
+      return {
+        luminance: lum / samples,
+        saturation: sat / samples
+      };
+    }
+
+    function getProfile(stats) {
+      const lowLight = stats.luminance < 95;
+
+      return {
+        lowLight,
+        contrast: lowLight ? rand(1.02, 1.08) : rand(0.92, 1.00),
+        exposure: lowLight ? rand(1.08, 1.18) : rand(0.98, 1.05),
+        saturation: lowLight ? rand(1.04, 1.14) : rand(0.88, 0.97),
+        warmthR: lowLight ? rand(1.02, 1.10) : rand(0.96, 1.02),
+        warmthG: lowLight ? rand(0.97, 1.02) : rand(1.00, 1.05),
+        warmthB: lowLight ? rand(0.90, 0.98) : rand(1.02, 1.08),
+        blackLift: lowLight ? rand(4, 10) : rand(8, 15),
+        highlightPush: lowLight ? rand(0.16, 0.24) : rand(0.08, 0.14),
+        noise: lowLight ? rand(14, 22) : rand(8, 14),
+        colorNoise: lowLight ? rand(6, 12) : rand(4, 8),
+        vignette: lowLight ? rand(0.18, 0.28) : rand(0.10, 0.18),
+        hotspot: lowLight ? rand(0.12, 0.22) : rand(0.03, 0.08),
+        chromaShift: lowLight ? rand(1.2, 1.8) : rand(0.8, 1.3),
+        jpegQuality: lowLight ? SETTINGS.workingJPEGQualityNight : SETTINGS.workingJPEGQualityDay,
+        sharpen: lowLight ? rand(0.10, 0.18) : rand(0.06, 0.12)
+      };
+    }
+
+    function downsampleSoft(ctx, sourceCanvas, width, height) {
+      const softCanvas = document.createElement('canvas');
+      softCanvas.width = Math.max(1, Math.round(width * 0.72));
+      softCanvas.height = Math.max(1, Math.round(height * 0.72));
+      const softCtx = softCanvas.getContext('2d', { willReadFrequently: true });
+      softCtx.drawImage(sourceCanvas, 0, 0, softCanvas.width, softCanvas.height);
+      ctx.drawImage(softCanvas, 0, 0, softCanvas.width, softCanvas.height, 0, 0, width, height);
+    }
+
+    function primaryColorPass(imageData, width, height, profile) {
+      const data = imageData.data;
+      const cx = width / 2;
+      const cy = height / 2;
+      const maxDist = Math.sqrt(cx * cx + cy * cy);
+
+      for (let i = 0; i < data.length; i += 4) {
+        const px = (i / 4) % width;
+        const py = Math.floor((i / 4) / width);
+        const dx = px - cx;
+        const dy = py - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy) / maxDist;
+        const radial = Math.min(1, dist);
+
+        let r = data[i];
+        let g = data[i + 1];
+        let b = data[i + 2];
+
+        r = ((r - 128) * profile.contrast + 128) * profile.exposure;
+        g = ((g - 128) * profile.contrast + 128) * profile.exposure;
+        b = ((b - 128) * profile.contrast + 128) * profile.exposure;
+
+        r = (r - 128) * profile.saturation + 128;
+        g = (g - 128) * profile.saturation + 128;
+        b = (b - 128) * profile.saturation + 128;
+
+        r = r * profile.warmthR + profile.blackLift;
+        g = g * profile.warmthG + profile.blackLift;
+        b = b * profile.warmthB + profile.blackLift;
+
+        const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        const hot = profile.hotspot * Math.pow(1 - radial, 2.7);
+        const vig = 1 - profile.vignette * Math.pow(radial, 1.9);
+
+        if (luma > 170) {
+          const bump = (luma - 170) * profile.highlightPush;
+          r += bump;
+          g += bump;
+          b += bump;
+        }
+
+        const monoNoise = rand(-profile.noise, profile.noise);
+        const cNoiseR = rand(-profile.colorNoise, profile.colorNoise);
+        const cNoiseG = rand(-profile.colorNoise, profile.colorNoise);
+        const cNoiseB = rand(-profile.colorNoise, profile.colorNoise);
+
+        r = (r + monoNoise + cNoiseR) * vig + hot * 255;
+        g = (g + monoNoise + cNoiseG) * vig + hot * 250;
+        b = (b + monoNoise + cNoiseB) * vig + hot * 240;
+
+        data[i] = clamp(r);
+        data[i + 1] = clamp(g);
+        data[i + 2] = clamp(b);
+      }
+
+      return imageData;
+    }
+
+    function chromaticAberrationPass(imageData, width, height, profile) {
+      const src = new Uint8ClampedArray(imageData.data);
+      const data = imageData.data;
+      const cx = width / 2;
+      const cy = height / 2;
+      const maxDist = Math.sqrt(cx * cx + cy * cy);
+
+      const index = (x, y) => ((y * width) + x) * 4;
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const dx = x - cx;
+          const dy = y - cy;
+          const dist = Math.sqrt(dx * dx + dy * dy) / maxDist;
+          if (dist < 0.28) continue;
+
+          const shift = Math.max(0, Math.round(profile.chromaShift * dist));
+          const rx = Math.max(0, Math.min(width - 1, x + Math.sign(dx) * shift));
+          const bx = Math.max(0, Math.min(width - 1, x - Math.sign(dx) * shift));
+          const ry = Math.max(0, Math.min(height - 1, y + Math.sign(dy) * shift));
+          const by = Math.max(0, Math.min(height - 1, y - Math.sign(dy) * shift));
+
+          const i = index(x, y);
+          const ir = index(rx, ry);
+          const ib = index(bx, by);
+
+          data[i] = src[ir];
+          data[i + 2] = src[ib + 2];
+        }
+      }
+
+      return imageData;
+    }
+
+    function sharpenPass(ctx, width, height, amount) {
+      const base = ctx.getImageData(0, 0, width, height);
+      const blurredCanvas = document.createElement('canvas');
+      blurredCanvas.width = Math.max(1, Math.round(width * 0.85));
+      blurredCanvas.height = Math.max(1, Math.round(height * 0.85));
+      const bctx = blurredCanvas.getContext('2d');
+      bctx.drawImage(ctx.canvas, 0, 0, blurredCanvas.width, blurredCanvas.height);
+
+      const tmpCanvas = document.createElement('canvas');
+      tmpCanvas.width = width;
+      tmpCanvas.height = height;
+      const tctx = tmpCanvas.getContext('2d');
+      tctx.drawImage(blurredCanvas, 0, 0, blurredCanvas.width, blurredCanvas.height, 0, 0, width, height);
+
+      const blur = tctx.getImageData(0, 0, width, height);
+      const bd = base.data;
+      const sd = blur.data;
+
+      for (let i = 0; i < bd.length; i += 4) {
+        bd[i] = clamp(bd[i] + (bd[i] - sd[i]) * amount);
+        bd[i + 1] = clamp(bd[i + 1] + (bd[i + 1] - sd[i + 1]) * amount);
+        bd[i + 2] = clamp(bd[i + 2] + (bd[i + 2] - sd[i + 2]) * amount);
+      }
+
+      ctx.putImageData(base, 0, 0);
+    }
+
+    async function jpegCrunch(canvas, quality) {
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
+      const img = await createImageBitmap(blob);
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      img.close();
+    }
+
+    function addDateStamp(ctx, width, height) {
+      const stamp = formatTimestamp();
+      const size = Math.max(16, Math.round(width * 0.028));
+      ctx.save();
+      ctx.font = `bold ${size}px Arial, Helvetica, sans-serif`;
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'bottom';
+      ctx.fillStyle = 'rgba(255, 170, 50, 0.88)';
+      ctx.shadowColor = 'rgba(0,0,0,0.55)';
+      ctx.shadowBlur = 4;
+      ctx.fillText(stamp, width - size, height - size * 0.75);
+      ctx.restore();
+    }
+
+    async function processFrame() {
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+      if (!vw || !vh) return;
+
+      setStatus('Processing…');
+      captureBtn.disabled = true;
+
+      const fitted = fitSize(vw, vh, SETTINGS.maxLongEdge);
+
+      const sourceCanvas = document.createElement('canvas');
+      sourceCanvas.width = fitted.width;
+      sourceCanvas.height = fitted.height;
+      const sctx = sourceCanvas.getContext('2d', { willReadFrequently: true });
+      sctx.drawImage(video, 0, 0, sourceCanvas.width, sourceCanvas.height);
+
+      const scan = sctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+      const stats = sceneStats(scan.data);
+      const profile = getProfile(stats);
+
+      output.width = sourceCanvas.width;
+      output.height = sourceCanvas.height;
+      const octx = output.getContext('2d', { willReadFrequently: true });
+      downsampleSoft(octx, sourceCanvas, output.width, output.height);
+
+      let frame = octx.getImageData(0, 0, output.width, output.height);
+      frame = primaryColorPass(frame, output.width, output.height, profile);
+      frame = chromaticAberrationPass(frame, output.width, output.height, profile);
+      octx.putImageData(frame, 0, 0);
+      sharpenPass(octx, output.width, output.height, profile.sharpen);
+      await jpegCrunch(output, profile.jpegQuality);
+
+      if (SETTINGS.dateStamp) {
+        const finalCtx = output.getContext('2d');
+        addDateStamp(finalCtx, output.width, output.height);
+      }
+
+      video.style.display = 'none';
+      output.style.display = 'block';
+      saveHint.style.display = 'block';
+      captured = true;
+      captureBtn.textContent = 'Retake';
+      captureBtn.disabled = false;
+      setStatus(profile.lowLight ? 'Flashy night profile' : 'Daylight digicam profile');
+
+      if (lastBlobUrl) {
+        URL.revokeObjectURL(lastBlobUrl);
+        lastBlobUrl = '';
+      }
+    }
+
+    function retake() {
+      output.style.display = 'none';
+      video.style.display = 'block';
+      saveHint.style.display = 'none';
+      captured = false;
+      captureBtn.textContent = 'Capture';
+      setStatus('Live preview');
+    }
+
+    async function saveCurrentImage() {
+      const blob = await new Promise(resolve => output.toBlob(resolve, 'image/jpeg', SETTINGS.outputQuality));
+      if (!blob) return;
+
+      if (lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
+      lastBlobUrl = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = lastBlobUrl;
+      a.download = `digicam_${Date.now()}.jpg`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+
+    captureBtn.addEventListener('click', async () => {
+      if (!captured) {
+        await processFrame();
+      } else {
+        retake();
+      }
+    });
+
+    output.addEventListener('click', () => {
+      saveCurrentImage();
+    });
+
+    window.addEventListener('beforeunload', () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      if (lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
+    });
+
+    startCamera();
+  </script>
+</body>
+</html>
