@@ -14,7 +14,6 @@
       --shadow: 0 24px 60px rgba(0,0,0,.4);
       --radius: 30px;
       --button-shadow: 0 12px 30px rgba(0,0,0,.28);
-      --preview-filter: none;
     }
 
     * { box-sizing: border-box; }
@@ -23,15 +22,15 @@
       margin: 0;
       width: 100%;
       min-height: 100%;
-      background: radial-gradient(circle at top, rgba(255,255,255,.06), transparent 25%), linear-gradient(180deg, #11131a, #050507 72%);
+      background:
+        radial-gradient(circle at top, rgba(255,255,255,.06), transparent 25%),
+        linear-gradient(180deg, #11131a, #050507 72%);
       color: var(--text);
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       overflow: hidden;
     }
 
-    body {
-      padding: 10px;
-    }
+    body { padding: 10px; }
 
     .app {
       width: 100%;
@@ -42,7 +41,7 @@
     }
 
     .camera-shell {
-      width: min(100%, 960px);
+      width: min(100%, 980px);
       min-height: 100%;
       background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.015));
       border: 1px solid var(--line);
@@ -58,7 +57,7 @@
     .viewer {
       position: relative;
       flex: 1 1 auto;
-      min-height: min(72dvh, 920px);
+      min-height: min(76dvh, 960px);
       overflow: hidden;
       border-radius: var(--radius);
       background: #000;
@@ -71,19 +70,21 @@
       inset: 0;
       width: 100%;
       height: 100%;
-      object-fit: cover;
       display: block;
       background: #000;
     }
 
-    video {
-      filter: var(--preview-filter);
-      transition: filter .25s ease, transform .25s ease;
+    video { display: none; }
+
+    #preview,
+    #output {
+      object-fit: cover;
+      image-rendering: auto;
     }
 
-    .viewer.fisheye-preview video {
-      transform: scale(1.08);
-      filter: var(--preview-filter) contrast(1.06);
+    #output {
+      display: none;
+      z-index: 1;
     }
 
     .viewer::after {
@@ -93,21 +94,7 @@
       pointer-events: none;
       background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,0) 16%, rgba(0,0,0,.08) 100%);
       mix-blend-mode: screen;
-    }
-
-    .viewer.fisheye-preview::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      background: radial-gradient(circle at center, transparent 38%, rgba(0,0,0,.12) 58%, rgba(0,0,0,.42) 100%);
-      z-index: 2;
-    }
-
-    #output {
-      display: none;
-      cursor: pointer;
-      z-index: 1;
+      z-index: 3;
     }
 
     .hud {
@@ -132,8 +119,8 @@
       left: 12px;
       top: 12px;
       border-radius: 999px;
-      padding: 9px 12px;
-      font-size: 12px;
+      padding: 8px 11px;
+      font-size: 11px;
       letter-spacing: .06em;
       text-transform: uppercase;
       line-height: 1;
@@ -203,8 +190,10 @@
       background: rgba(255,255,255,.06);
       color: var(--text);
       border-radius: 999px;
-      padding: 12px 14px;
+      padding: 9px 11px;
       font: inherit;
+      font-size: 12px;
+      letter-spacing: .02em;
       cursor: pointer;
       transition: transform .15s ease, background .15s ease, border-color .15s ease, opacity .15s ease;
       white-space: nowrap;
@@ -232,7 +221,7 @@
       width: 74px;
       height: 74px;
       border-radius: 999px;
-      border: 4px solid rgba(255,255,255,.9);
+      border: 4px solid rgba(255,255,255,.92);
       background: transparent;
       padding: 0;
       display: grid;
@@ -266,10 +255,6 @@
 
     .hidden { display: none !important; }
 
-    .subtle {
-      color: var(--muted);
-    }
-
     @media (max-width: 720px) {
       body { padding: 0; }
       .app { min-height: 100dvh; }
@@ -280,13 +265,13 @@
         padding: 8px;
       }
       .viewer {
-        min-height: calc(100dvh - 158px);
+        min-height: calc(100dvh - 154px);
         border-radius: 24px;
       }
       .mode-chip,
       .pill-btn {
-        padding: 11px 13px;
-        font-size: 14px;
+        padding: 8px 10px;
+        font-size: 11px;
       }
       .capture-btn {
         width: 76px;
@@ -304,9 +289,10 @@
     <div class="camera-shell" id="cameraShell">
       <div class="viewer" id="viewer">
         <video id="video" autoplay playsinline muted></video>
+        <canvas id="preview"></canvas>
         <canvas id="output"></canvas>
         <div class="hud">
-          <div id="modeBadge" class="mode-badge">Disposable flash</div>
+          <div id="modeBadge" class="mode-badge">Disposable</div>
           <button id="fullscreenBtn" class="icon-btn" type="button" aria-label="Toggle fullscreen">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M8 3H3v5"></path>
@@ -335,6 +321,7 @@
 
   <script>
     const video = document.getElementById('video');
+    const preview = document.getElementById('preview');
     const output = document.getElementById('output');
     const captureBtn = document.getElementById('captureBtn');
     const retakeBtn = document.getElementById('retakeBtn');
@@ -347,164 +334,178 @@
     const toast = document.getElementById('toast');
     const appRoot = document.getElementById('appRoot');
 
-    let stream = null;
-    let captured = false;
-    let lastBlobUrl = '';
-    let toastTimer = 0;
-
     const MODES = {
       disposable: {
-        label: 'Disposable flash',
-        previewFilter: 'contrast(1.06) saturate(1.08) brightness(1.02) sepia(.08)',
-        maxLongEdge: 1380,
-        jpegQualityDay: 0.5,
-        jpegQualityNight: 0.38,
+        badge: 'Disposable',
+        label: 'Disposable',
+        filePrefix: 'disposable_flash',
+        previewLongEdge: 780,
+        maxLongEdge: 1480,
         outputQuality: 0.9,
-        base: {
-          contrast: [1.02, 1.14],
-          exposure: [1.06, 1.18],
-          saturation: [1.0, 1.12],
-          warmthR: [1.03, 1.12],
-          warmthG: [0.99, 1.04],
-          warmthB: [0.9, 0.98],
-          blackLift: [8, 18],
-          highlightPush: [0.2, 0.32],
-          noise: [12, 22],
-          colorNoise: [6, 12],
-          vignette: [0.14, 0.22],
-          hotspot: [0.12, 0.24],
-          chromaShift: [1.0, 1.7],
-          sharpen: [0.08, 0.16],
-          flashBloom: [0.18, 0.32],
-          coolBoost: [0.0, 0.0],
-          magentaBoost: [0.0, 0.0],
-          barrel: 0
+        profile: {
+          contrast: 1.14,
+          exposure: 1.08,
+          saturation: 1.05,
+          warmthR: 1.08,
+          warmthG: 1.01,
+          warmthB: 0.92,
+          blackLift: 12,
+          highlightPush: 0.28,
+          noise: 18,
+          colorNoise: 9,
+          vignette: 0.18,
+          hotspot: 0.15,
+          chromaShift: 1.3,
+          sharpen: 0.08,
+          flashBloom: 0.2,
+          barrel: 0,
+          blockiness: 0.36,
+          haze: 0.05,
+          magentaBoost: 3,
+          coolBoost: 0,
+          lowLightExposureBoost: 0.08,
+          lowLightNoiseBoost: 4,
+          lowLightBloomBoost: 0.08,
+          lowLightContrastBoost: 0.03
         }
       },
       ccd: {
-        label: 'CCD digicam daylight',
-        previewFilter: 'contrast(0.98) saturate(0.94) brightness(1.05) hue-rotate(-3deg)',
-        maxLongEdge: 1440,
-        jpegQualityDay: 0.56,
-        jpegQualityNight: 0.42,
+        badge: 'CCD digicam',
+        label: 'CCD digicam',
+        filePrefix: 'ccd_digicam',
+        previewLongEdge: 820,
+        maxLongEdge: 1540,
         outputQuality: 0.92,
-        base: {
-          contrast: [0.9, 1.0],
-          exposure: [1.02, 1.08],
-          saturation: [0.86, 0.96],
-          warmthR: [0.95, 1.0],
-          warmthG: [1.0, 1.05],
-          warmthB: [1.03, 1.12],
-          blackLift: [9, 16],
-          highlightPush: [0.08, 0.14],
-          noise: [7, 13],
-          colorNoise: [3, 7],
-          vignette: [0.08, 0.14],
-          hotspot: [0.02, 0.05],
-          chromaShift: [0.7, 1.2],
-          sharpen: [0.11, 0.19],
-          flashBloom: [0.0, 0.02],
-          coolBoost: [2, 8],
-          magentaBoost: [0.0, 0.0],
-          barrel: 0
+        profile: {
+          contrast: 0.96,
+          exposure: 1.05,
+          saturation: 0.9,
+          warmthR: 0.98,
+          warmthG: 1.01,
+          warmthB: 1.08,
+          blackLift: 13,
+          highlightPush: 0.12,
+          noise: 11,
+          colorNoise: 5,
+          vignette: 0.1,
+          hotspot: 0.04,
+          chromaShift: 0.9,
+          sharpen: 0.13,
+          flashBloom: 0.01,
+          barrel: 0,
+          blockiness: 0.18,
+          haze: 0.08,
+          magentaBoost: 0,
+          coolBoost: 4,
+          lowLightExposureBoost: 0.06,
+          lowLightNoiseBoost: 3,
+          lowLightBloomBoost: 0.01,
+          lowLightContrastBoost: 0.01
         }
       },
       fisheye: {
-        label: 'Fisheye Y2K club',
-        previewFilter: 'contrast(1.08) saturate(1.14) brightness(1.02) hue-rotate(5deg)',
-        maxLongEdge: 1280,
-        jpegQualityDay: 0.44,
-        jpegQualityNight: 0.34,
+        badge: 'Fisheye Y2K',
+        label: 'Fisheye Y2K',
+        filePrefix: 'fisheye_y2k',
+        previewLongEdge: 760,
+        maxLongEdge: 1420,
         outputQuality: 0.89,
-        base: {
-          contrast: [1.04, 1.18],
-          exposure: [1.04, 1.16],
-          saturation: [1.02, 1.14],
-          warmthR: [1.01, 1.08],
-          warmthG: [0.95, 1.02],
-          warmthB: [0.96, 1.04],
-          blackLift: [10, 18],
-          highlightPush: [0.18, 0.28],
-          noise: [14, 24],
-          colorNoise: [6, 12],
-          vignette: [0.2, 0.32],
-          hotspot: [0.08, 0.18],
-          chromaShift: [1.4, 2.2],
-          sharpen: [0.08, 0.15],
-          flashBloom: [0.08, 0.16],
-          coolBoost: [0.0, 3.0],
-          magentaBoost: [4.0, 10.0],
-          barrel: 0.22
+        profile: {
+          contrast: 1.12,
+          exposure: 1.07,
+          saturation: 1.09,
+          warmthR: 1.04,
+          warmthG: 0.98,
+          warmthB: 0.99,
+          blackLift: 11,
+          highlightPush: 0.22,
+          noise: 19,
+          colorNoise: 10,
+          vignette: 0.26,
+          hotspot: 0.09,
+          chromaShift: 1.9,
+          sharpen: 0.07,
+          flashBloom: 0.12,
+          barrel: 0.22,
+          blockiness: 0.42,
+          haze: 0.04,
+          magentaBoost: 7,
+          coolBoost: 1.5,
+          lowLightExposureBoost: 0.09,
+          lowLightNoiseBoost: 4,
+          lowLightBloomBoost: 0.05,
+          lowLightContrastBoost: 0.03
         }
       }
     };
 
     const STATE = {
-      mode: 'disposable'
+      mode: 'disposable',
+      stream: null,
+      captured: false,
+      lastBlobUrl: '',
+      toastTimer: 0,
+      previewRAF: 0,
+      lastPreviewTick: 0,
+      previewFPS: 10
     };
 
-    function rand(min, max) {
-      return Math.random() * (max - min) + min;
+    function clamp(value, min = 0, max = 255) {
+      return Math.max(min, Math.min(max, value));
     }
 
-    function clamp(v, min = 0, max = 255) {
-      return Math.max(min, Math.min(max, v));
+    function lerp(a, b, t) {
+      return a + (b - a) * t;
+    }
+
+    function fitSize(width, height, maxLongEdge) {
+      const longEdge = Math.max(width, height);
+      if (longEdge <= maxLongEdge) return { width, height };
+      const scale = maxLongEdge / longEdge;
+      return {
+        width: Math.max(1, Math.round(width * scale)),
+        height: Math.max(1, Math.round(height * scale))
+      };
     }
 
     function showToast(message, sticky = false) {
       toast.textContent = message;
       toast.style.display = 'block';
-      clearTimeout(toastTimer);
+      clearTimeout(STATE.toastTimer);
       if (!sticky) {
-        toastTimer = window.setTimeout(() => {
+        STATE.toastTimer = window.setTimeout(() => {
           toast.style.display = 'none';
         }, 1800);
       }
     }
 
     function hideToast() {
-      clearTimeout(toastTimer);
+      clearTimeout(STATE.toastTimer);
       toast.style.display = 'none';
     }
 
-    function setMode(modeKey) {
-      STATE.mode = modeKey;
-      const mode = MODES[modeKey];
-      modeBadge.textContent = mode.label;
-      document.documentElement.style.setProperty('--preview-filter', mode.previewFilter);
-      viewer.classList.toggle('fisheye-preview', modeKey === 'fisheye');
-
-      Array.from(modeRow.querySelectorAll('.mode-chip')).forEach((button) => {
-        button.classList.toggle('active', button.dataset.mode === modeKey);
-      });
+    function getViewerAspect() {
+      return viewer.clientWidth && viewer.clientHeight
+        ? viewer.clientWidth / viewer.clientHeight
+        : 4 / 3;
     }
 
-    function buildModeButtons() {
-      const fragment = document.createDocumentFragment();
-      Object.entries(MODES).forEach(([key, value]) => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'mode-chip';
-        button.textContent = value.label;
-        button.dataset.mode = key;
-        button.addEventListener('click', () => {
-          if (captured) return;
-          setMode(key);
-        });
-        fragment.appendChild(button);
-      });
-      modeRow.appendChild(fragment);
-      setMode(STATE.mode);
-    }
+    function getCoverCrop(srcWidth, srcHeight, targetAspect) {
+      const srcAspect = srcWidth / srcHeight;
+      let sx = 0;
+      let sy = 0;
+      let sw = srcWidth;
+      let sh = srcHeight;
 
-    function fitSize(w, h, maxLongEdge) {
-      const longEdge = Math.max(w, h);
-      if (longEdge <= maxLongEdge) return { width: w, height: h };
-      const scale = maxLongEdge / longEdge;
-      return {
-        width: Math.round(w * scale),
-        height: Math.round(h * scale)
-      };
+      if (srcAspect > targetAspect) {
+        sw = srcHeight * targetAspect;
+        sx = (srcWidth - sw) / 2;
+      } else {
+        sh = srcWidth / targetAspect;
+        sy = (srcHeight - sh) / 2;
+      }
+
+      return { sx, sy, sw, sh };
     }
 
     function sceneStats(data) {
@@ -518,61 +519,68 @@
         const b = data[i + 2];
         const max = Math.max(r, g, b);
         const min = Math.min(r, g, b);
+
         lum += 0.2126 * r + 0.7152 * g + 0.0722 * b;
         sat += max === 0 ? 0 : (max - min) / max;
         samples++;
       }
 
       return {
-        luminance: lum / samples,
-        saturation: sat / samples
+        luminance: lum / Math.max(1, samples),
+        saturation: sat / Math.max(1, samples)
       };
     }
 
-    function ranged(profile, key) {
-      const [min, max] = profile.base[key];
-      return rand(min, max);
-    }
-
-    function getProfile(modeKey, stats) {
-      const mode = MODES[modeKey];
-      const lowLight = stats.luminance < 96;
-      const baseContrast = ranged(mode, 'contrast');
-      const baseExposure = ranged(mode, 'exposure');
-      const baseSat = ranged(mode, 'saturation');
+    function buildProfile(modeKey, stats) {
+      const base = MODES[modeKey].profile;
+      const lowLight = stats.luminance < 104;
+      const darkAmount = clamp((122 - stats.luminance) / 90, 0, 1);
+      const saturationBias = clamp((stats.saturation - 0.32) * 1.6, -0.12, 0.12);
 
       return {
-        lowLight,
-        contrast: lowLight ? baseContrast + 0.03 : baseContrast,
-        exposure: lowLight ? baseExposure + 0.08 : baseExposure,
-        saturation: lowLight ? baseSat + 0.05 : baseSat,
-        warmthR: ranged(mode, 'warmthR'),
-        warmthG: ranged(mode, 'warmthG'),
-        warmthB: ranged(mode, 'warmthB'),
-        blackLift: ranged(mode, 'blackLift'),
-        highlightPush: ranged(mode, 'highlightPush'),
-        noise: lowLight ? ranged(mode, 'noise') + 3 : ranged(mode, 'noise'),
-        colorNoise: lowLight ? ranged(mode, 'colorNoise') + 1 : ranged(mode, 'colorNoise'),
-        vignette: ranged(mode, 'vignette'),
-        hotspot: lowLight ? ranged(mode, 'hotspot') + 0.04 : ranged(mode, 'hotspot'),
-        chromaShift: ranged(mode, 'chromaShift'),
-        jpegQuality: lowLight ? mode.jpegQualityNight : mode.jpegQualityDay,
-        sharpen: ranged(mode, 'sharpen'),
-        flashBloom: ranged(mode, 'flashBloom'),
-        coolBoost: ranged(mode, 'coolBoost'),
-        magentaBoost: ranged(mode, 'magentaBoost'),
-        barrel: mode.base.barrel,
-        outputQuality: mode.outputQuality,
-        modeLabel: mode.label
+        contrast: base.contrast + (lowLight ? base.lowLightContrastBoost * darkAmount : 0),
+        exposure: base.exposure + (lowLight ? base.lowLightExposureBoost * darkAmount : 0),
+        saturation: base.saturation + saturationBias,
+        warmthR: base.warmthR,
+        warmthG: base.warmthG,
+        warmthB: base.warmthB,
+        blackLift: base.blackLift,
+        highlightPush: base.highlightPush,
+        noise: base.noise + (lowLight ? base.lowLightNoiseBoost * darkAmount : 0),
+        colorNoise: base.colorNoise + (lowLight ? 1.2 * darkAmount : 0),
+        vignette: base.vignette,
+        hotspot: base.hotspot + (lowLight ? 0.03 * darkAmount : 0),
+        chromaShift: base.chromaShift,
+        sharpen: base.sharpen,
+        flashBloom: base.flashBloom + (lowLight ? base.lowLightBloomBoost * darkAmount : 0),
+        barrel: base.barrel,
+        blockiness: base.blockiness,
+        haze: base.haze + (lowLight ? 0.03 * darkAmount : 0),
+        magentaBoost: base.magentaBoost,
+        coolBoost: base.coolBoost,
+        lowLight
       };
     }
 
-    function drawSourceFrame(canvas, width, height) {
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      ctx.drawImage(video, 0, 0, width, height);
-      return ctx;
+    function drawCoveredFrame(targetCanvas, longEdgeCap) {
+      const sourceWidth = video.videoWidth;
+      const sourceHeight = video.videoHeight;
+      const aspect = getViewerAspect();
+      const crop = getCoverCrop(sourceWidth, sourceHeight, aspect);
+      const fitted = fitSize(crop.sw, crop.sh, longEdgeCap);
+
+      targetCanvas.width = fitted.width;
+      targetCanvas.height = fitted.height;
+
+      const ctx = targetCanvas.getContext('2d', { willReadFrequently: true });
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(
+        video,
+        crop.sx, crop.sy, crop.sw, crop.sh,
+        0, 0, fitted.width, fitted.height
+      );
+
+      return { ctx, crop, width: fitted.width, height: fitted.height };
     }
 
     function applyBarrelWarp(sourceCanvas, amount) {
@@ -606,6 +614,9 @@
           const di = ((y * width) + x) * 4;
 
           if (sx < 0 || sy < 0 || sx >= width || sy >= height) {
+            dst[di] = 0;
+            dst[di + 1] = 0;
+            dst[di + 2] = 0;
             dst[di + 3] = 255;
             continue;
           }
@@ -622,12 +633,14 @@
       return warpedCanvas;
     }
 
-    function downsampleSoft(ctx, sourceCanvas, width, height) {
+    function downsampleSoft(ctx, sourceCanvas, width, height, scale = 0.76) {
       const softCanvas = document.createElement('canvas');
-      softCanvas.width = Math.max(1, Math.round(width * 0.74));
-      softCanvas.height = Math.max(1, Math.round(height * 0.74));
+      softCanvas.width = Math.max(1, Math.round(width * scale));
+      softCanvas.height = Math.max(1, Math.round(height * scale));
       const softCtx = softCanvas.getContext('2d');
+      softCtx.imageSmoothingEnabled = true;
       softCtx.drawImage(sourceCanvas, 0, 0, softCanvas.width, softCanvas.height);
+      ctx.imageSmoothingEnabled = true;
       ctx.drawImage(softCanvas, 0, 0, softCanvas.width, softCanvas.height, 0, 0, width, height);
     }
 
@@ -653,32 +666,40 @@
         g = ((g - 128) * profile.contrast + 128) * profile.exposure;
         b = ((b - 128) * profile.contrast + 128) * profile.exposure;
 
-        r = (r - 128) * profile.saturation + 128;
-        g = (g - 128) * profile.saturation + 128;
-        b = (b - 128) * profile.saturation + 128;
+        const lumaBeforeSat = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        r = lumaBeforeSat + (r - lumaBeforeSat) * profile.saturation;
+        g = lumaBeforeSat + (g - lumaBeforeSat) * profile.saturation;
+        b = lumaBeforeSat + (b - lumaBeforeSat) * profile.saturation;
 
         r = r * profile.warmthR + profile.blackLift + profile.magentaBoost;
-        g = g * profile.warmthG + profile.blackLift * 0.85;
+        g = g * profile.warmthG + profile.blackLift * 0.84;
         b = b * profile.warmthB + profile.blackLift + profile.coolBoost;
 
         const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        const hot = profile.hotspot * Math.pow(1 - radial, 2.4);
+        const hot = profile.hotspot * Math.pow(1 - radial, 2.3);
         const vig = 1 - profile.vignette * Math.pow(radial, 1.85);
 
-        if (luma > 168) {
-          const bump = (luma - 168) * profile.highlightPush;
+        if (luma > 170) {
+          const bump = (luma - 170) * profile.highlightPush;
           r += bump;
           g += bump;
           b += bump;
         }
 
-        const monoNoise = rand(-profile.noise, profile.noise);
-        const cNoiseR = rand(-profile.colorNoise, profile.colorNoise);
-        const cNoiseG = rand(-profile.colorNoise, profile.colorNoise);
-        const cNoiseB = rand(-profile.colorNoise, profile.colorNoise);
+        if (profile.haze > 0) {
+          const hazeGain = profile.haze * (1 - radial * 0.65);
+          r = lerp(r, 233, hazeGain * 0.2);
+          g = lerp(g, 231, hazeGain * 0.2);
+          b = lerp(b, 228, hazeGain * 0.2);
+        }
+
+        const monoNoise = (Math.random() * 2 - 1) * profile.noise;
+        const cNoiseR = (Math.random() * 2 - 1) * profile.colorNoise;
+        const cNoiseG = (Math.random() * 2 - 1) * profile.colorNoise;
+        const cNoiseB = (Math.random() * 2 - 1) * profile.colorNoise;
 
         r = (r + monoNoise + cNoiseR) * vig + hot * 255;
-        g = (g + monoNoise + cNoiseG) * vig + hot * 248;
+        g = (g + monoNoise + cNoiseG) * vig + hot * 249;
         b = (b + monoNoise + cNoiseB) * vig + hot * 244;
 
         data[i] = clamp(r);
@@ -702,13 +723,13 @@
           const dx = x - cx;
           const dy = y - cy;
           const dist = Math.sqrt(dx * dx + dy * dy) / maxDist;
-          if (dist < 0.22) continue;
+          if (dist < 0.18) continue;
 
           const shift = Math.max(0, Math.round(profile.chromaShift * dist));
-          const rx = Math.max(0, Math.min(width - 1, x + Math.sign(dx) * shift));
-          const bx = Math.max(0, Math.min(width - 1, x - Math.sign(dx) * shift));
-          const ry = Math.max(0, Math.min(height - 1, y + Math.sign(dy) * shift));
-          const by = Math.max(0, Math.min(height - 1, y - Math.sign(dy) * shift));
+          const rx = Math.max(0, Math.min(width - 1, x + Math.sign(dx || 1) * shift));
+          const bx = Math.max(0, Math.min(width - 1, x - Math.sign(dx || 1) * shift));
+          const ry = Math.max(0, Math.min(height - 1, y + Math.sign(dy || 1) * shift));
+          const by = Math.max(0, Math.min(height - 1, y - Math.sign(dy || 1) * shift));
 
           const i = index(x, y);
           const ir = index(rx, ry);
@@ -726,24 +747,26 @@
       if (amount <= 0.01) return;
 
       const bloomCanvas = document.createElement('canvas');
-      bloomCanvas.width = Math.max(1, Math.round(width * 0.28));
-      bloomCanvas.height = Math.max(1, Math.round(height * 0.28));
+      bloomCanvas.width = Math.max(1, Math.round(width * 0.3));
+      bloomCanvas.height = Math.max(1, Math.round(height * 0.3));
       const bctx = bloomCanvas.getContext('2d');
-      bctx.filter = `blur(${Math.max(8, Math.round(width * 0.014))}px) brightness(${1 + amount * 1.8})`;
+      bctx.filter = `blur(${Math.max(7, Math.round(width * 0.012))}px) brightness(${1 + amount * 1.6})`;
       bctx.drawImage(ctx.canvas, 0, 0, bloomCanvas.width, bloomCanvas.height);
 
       ctx.save();
-      ctx.globalAlpha = 0.22 + amount * 0.35;
-      ctx.filter = `blur(${Math.max(8, Math.round(width * 0.006))}px)`;
+      ctx.globalAlpha = 0.18 + amount * 0.42;
+      ctx.filter = `blur(${Math.max(6, Math.round(width * 0.005))}px)`;
       ctx.drawImage(bloomCanvas, 0, 0, bloomCanvas.width, bloomCanvas.height, 0, 0, width, height);
       ctx.restore();
     }
 
     function sharpenPass(ctx, width, height, amount) {
+      if (amount <= 0) return;
+
       const base = ctx.getImageData(0, 0, width, height);
       const blurredCanvas = document.createElement('canvas');
-      blurredCanvas.width = Math.max(1, Math.round(width * 0.85));
-      blurredCanvas.height = Math.max(1, Math.round(height * 0.85));
+      blurredCanvas.width = Math.max(1, Math.round(width * 0.88));
+      blurredCanvas.height = Math.max(1, Math.round(height * 0.88));
       const bctx = blurredCanvas.getContext('2d');
       bctx.drawImage(ctx.canvas, 0, 0, blurredCanvas.width, blurredCanvas.height);
 
@@ -766,81 +789,202 @@
       ctx.putImageData(base, 0, 0);
     }
 
-    async function jpegCrunch(canvas, quality) {
-      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
-      if (!blob) return;
-      const img = await createImageBitmap(blob);
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      img.close();
+    function blockArtifactsPass(ctx, width, height, strength) {
+      if (strength <= 0) return;
+
+      const blockCanvas = document.createElement('canvas');
+      const blockScale = 0.22 - Math.min(0.08, strength * 0.06);
+      blockCanvas.width = Math.max(1, Math.round(width * blockScale));
+      blockCanvas.height = Math.max(1, Math.round(height * blockScale));
+      const bctx = blockCanvas.getContext('2d');
+      bctx.imageSmoothingEnabled = true;
+      bctx.drawImage(ctx.canvas, 0, 0, blockCanvas.width, blockCanvas.height);
+
+      ctx.save();
+      ctx.globalAlpha = 0.1 + strength * 0.18;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(blockCanvas, 0, 0, blockCanvas.width, blockCanvas.height, 0, 0, width, height);
+      ctx.restore();
     }
 
     function drawVignette(ctx, width, height, strength) {
-      const gradient = ctx.createRadialGradient(width / 2, height / 2, Math.min(width, height) * 0.18, width / 2, height / 2, Math.max(width, height) * 0.72);
+      const gradient = ctx.createRadialGradient(
+        width / 2, height / 2, Math.min(width, height) * 0.18,
+        width / 2, height / 2, Math.max(width, height) * 0.72
+      );
       gradient.addColorStop(0, 'rgba(0,0,0,0)');
       gradient.addColorStop(0.65, `rgba(0,0,0,${strength * 0.12})`);
-      gradient.addColorStop(1, `rgba(0,0,0,${strength * 0.46})`);
+      gradient.addColorStop(1, `rgba(0,0,0,${strength * 0.48})`);
       ctx.save();
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, width, height);
       ctx.restore();
     }
 
-    async function processFrame() {
-      const vw = video.videoWidth;
-      const vh = video.videoHeight;
-      if (!vw || !vh) return;
+    function compositeToCanvas(renderCanvas, targetCanvas) {
+      targetCanvas.width = renderCanvas.width;
+      targetCanvas.height = renderCanvas.height;
+      const ctx = targetCanvas.getContext('2d');
+      ctx.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
+      ctx.drawImage(renderCanvas, 0, 0);
+    }
+
+    function processFrame(modeKey, longEdgeCap) {
+      const sourceWidth = video.videoWidth;
+      const sourceHeight = video.videoHeight;
+      if (!sourceWidth || !sourceHeight) return null;
+
+      let sourceCanvas = document.createElement('canvas');
+      const { ctx: sourceCtx, width, height } = drawCoveredFrame(sourceCanvas, longEdgeCap);
+      const scan = sourceCtx.getImageData(0, 0, width, height);
+      const stats = sceneStats(scan.data);
+      const profile = buildProfile(modeKey, stats);
+
+      if (profile.barrel) {
+        sourceCanvas = applyBarrelWarp(sourceCanvas, profile.barrel);
+      }
+
+      const renderCanvas = document.createElement('canvas');
+      renderCanvas.width = sourceCanvas.width;
+      renderCanvas.height = sourceCanvas.height;
+      const rctx = renderCanvas.getContext('2d', { willReadFrequently: true });
+
+      rctx.clearRect(0, 0, renderCanvas.width, renderCanvas.height);
+      downsampleSoft(rctx, sourceCanvas, renderCanvas.width, renderCanvas.height, 0.76);
+
+      let frame = rctx.getImageData(0, 0, renderCanvas.width, renderCanvas.height);
+      frame = primaryColorPass(frame, renderCanvas.width, renderCanvas.height, profile);
+      frame = chromaticAberrationPass(frame, renderCanvas.width, renderCanvas.height, profile);
+      rctx.putImageData(frame, 0, 0);
+
+      flashBloomPass(rctx, renderCanvas.width, renderCanvas.height, profile.flashBloom);
+      sharpenPass(rctx, renderCanvas.width, renderCanvas.height, profile.sharpen);
+      blockArtifactsPass(rctx, renderCanvas.width, renderCanvas.height, profile.blockiness);
+      drawVignette(rctx, renderCanvas.width, renderCanvas.height, profile.vignette);
+
+      return {
+        canvas: renderCanvas,
+        profile
+      };
+    }
+
+    function syncPreviewCanvas() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.4);
+      const width = Math.max(1, Math.round(viewer.clientWidth * dpr));
+      const height = Math.max(1, Math.round(viewer.clientHeight * dpr));
+      if (preview.width !== width || preview.height !== height) {
+        preview.width = width;
+        preview.height = height;
+      }
+    }
+
+    function renderPreview(now = 0) {
+      if (STATE.captured) {
+        STATE.previewRAF = requestAnimationFrame(renderPreview);
+        return;
+      }
+
+      if (video.readyState < 2) {
+        STATE.previewRAF = requestAnimationFrame(renderPreview);
+        return;
+      }
+
+      const frameInterval = 1000 / STATE.previewFPS;
+      if (now - STATE.lastPreviewTick < frameInterval) {
+        STATE.previewRAF = requestAnimationFrame(renderPreview);
+        return;
+      }
+
+      STATE.lastPreviewTick = now;
+      syncPreviewCanvas();
+
+      const mode = MODES[STATE.mode];
+      const result = processFrame(STATE.mode, mode.previewLongEdge);
+      if (result) {
+        const pctx = preview.getContext('2d');
+        pctx.clearRect(0, 0, preview.width, preview.height);
+        pctx.imageSmoothingEnabled = true;
+        pctx.drawImage(result.canvas, 0, 0, preview.width, preview.height);
+      }
+
+      STATE.previewRAF = requestAnimationFrame(renderPreview);
+    }
+
+    function startPreviewLoop() {
+      cancelAnimationFrame(STATE.previewRAF);
+      STATE.lastPreviewTick = 0;
+      STATE.previewRAF = requestAnimationFrame(renderPreview);
+    }
+
+    function setMode(modeKey) {
+      STATE.mode = modeKey;
+      const mode = MODES[modeKey];
+      modeBadge.textContent = mode.badge;
+
+      Array.from(modeRow.querySelectorAll('.mode-chip')).forEach((button) => {
+        button.classList.toggle('active', button.dataset.mode === modeKey);
+      });
+
+      if (!STATE.captured && video.readyState >= 2) {
+        const result = processFrame(STATE.mode, mode.previewLongEdge);
+        if (result) {
+          syncPreviewCanvas();
+          const pctx = preview.getContext('2d');
+          pctx.clearRect(0, 0, preview.width, preview.height);
+          pctx.drawImage(result.canvas, 0, 0, preview.width, preview.height);
+        }
+      }
+    }
+
+    function buildModeButtons() {
+      const fragment = document.createDocumentFragment();
+      Object.entries(MODES).forEach(([key, value]) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'mode-chip';
+        button.textContent = value.label;
+        button.dataset.mode = key;
+        button.addEventListener('click', () => {
+          if (STATE.captured) return;
+          setMode(key);
+        });
+        fragment.appendChild(button);
+      });
+      modeRow.appendChild(fragment);
+      setMode(STATE.mode);
+    }
+
+    async function capturePhoto() {
+      if (STATE.captured || video.readyState < 2) return;
 
       captureBtn.disabled = true;
       showToast('Processing…', true);
 
       const mode = MODES[STATE.mode];
-      const fitted = fitSize(vw, vh, mode.maxLongEdge);
-      let sourceCanvas = document.createElement('canvas');
-      let sourceCtx = drawSourceFrame(sourceCanvas, fitted.width, fitted.height);
+      const result = processFrame(STATE.mode, mode.maxLongEdge);
 
-      if (STATE.mode === 'fisheye') {
-        sourceCanvas = applyBarrelWarp(sourceCanvas, mode.base.barrel);
-        sourceCtx = sourceCanvas.getContext('2d', { willReadFrequently: true });
+      if (!result) {
+        captureBtn.disabled = false;
+        showToast('Could not capture frame');
+        return;
       }
 
-      const scan = sourceCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
-      const stats = sceneStats(scan.data);
-      const profile = getProfile(STATE.mode, stats);
-
-      output.width = sourceCanvas.width;
-      output.height = sourceCanvas.height;
-      const octx = output.getContext('2d', { willReadFrequently: true });
-
-      octx.clearRect(0, 0, output.width, output.height);
-      downsampleSoft(octx, sourceCanvas, output.width, output.height);
-
-      let frame = octx.getImageData(0, 0, output.width, output.height);
-      frame = primaryColorPass(frame, output.width, output.height, profile);
-      frame = chromaticAberrationPass(frame, output.width, output.height, profile);
-      octx.putImageData(frame, 0, 0);
-
-      flashBloomPass(octx, output.width, output.height, profile.flashBloom);
-      sharpenPass(octx, output.width, output.height, profile.sharpen);
-      drawVignette(octx, output.width, output.height, profile.vignette);
-      await jpegCrunch(output, profile.jpegQuality);
-
-      video.style.display = 'none';
+      compositeToCanvas(result.canvas, output);
+      preview.style.display = 'none';
       output.style.display = 'block';
-      captured = true;
+
+      STATE.captured = true;
       captureBtn.classList.add('hidden');
       captureActions.classList.add('show');
       hideToast();
       showToast('Tap save to download');
-      modeBadge.textContent = profile.modeLabel;
       captureBtn.disabled = false;
     }
 
     function retake() {
       output.style.display = 'none';
-      video.style.display = 'block';
-      captured = false;
+      preview.style.display = 'block';
+      STATE.captured = false;
       captureActions.classList.remove('show');
       captureBtn.classList.remove('hidden');
       hideToast();
@@ -852,12 +996,12 @@
       const blob = await new Promise(resolve => output.toBlob(resolve, 'image/jpeg', quality));
       if (!blob) return;
 
-      if (lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
-      lastBlobUrl = URL.createObjectURL(blob);
+      if (STATE.lastBlobUrl) URL.revokeObjectURL(STATE.lastBlobUrl);
+      STATE.lastBlobUrl = URL.createObjectURL(blob);
 
       const a = document.createElement('a');
-      a.href = lastBlobUrl;
-      a.download = `${STATE.mode}_${Date.now()}.jpg`;
+      a.href = STATE.lastBlobUrl;
+      a.download = `${MODES[STATE.mode].filePrefix}_${Date.now()}.jpg`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -879,16 +1023,13 @@
         }
       };
 
-      const fallback = {
-        audio: false,
-        video: true
-      };
+      const fallback = { audio: false, video: true };
 
       try {
-        stream = await navigator.mediaDevices.getUserMedia(preferred);
+        STATE.stream = await navigator.mediaDevices.getUserMedia(preferred);
       } catch (err) {
         try {
-          stream = await navigator.mediaDevices.getUserMedia(fallback);
+          STATE.stream = await navigator.mediaDevices.getUserMedia(fallback);
         } catch (err2) {
           console.error(err2);
           showToast('Camera permission denied or no camera found', true);
@@ -896,7 +1037,7 @@
         }
       }
 
-      video.srcObject = stream;
+      video.srcObject = STATE.stream;
 
       try {
         await video.play();
@@ -908,6 +1049,8 @@
 
       captureBtn.disabled = false;
       hideToast();
+      syncPreviewCanvas();
+      startPreviewLoop();
     }
 
     async function toggleFullscreen() {
@@ -923,22 +1066,35 @@
       }
     }
 
-    captureBtn.addEventListener('click', async () => {
-      if (captured) return;
-      await processFrame();
-    });
-
+    captureBtn.addEventListener('click', capturePhoto);
     retakeBtn.addEventListener('click', retake);
     saveBtn.addEventListener('click', saveCurrentImage);
     fullscreenBtn.addEventListener('click', toggleFullscreen);
 
     document.addEventListener('fullscreenchange', () => {
       fullscreenBtn.style.opacity = document.fullscreenElement ? '0.92' : '1';
+      setTimeout(() => {
+        syncPreviewCanvas();
+      }, 80);
+    });
+
+    window.addEventListener('resize', () => {
+      syncPreviewCanvas();
+      if (!STATE.captured && video.readyState >= 2) {
+        const mode = MODES[STATE.mode];
+        const result = processFrame(STATE.mode, mode.previewLongEdge);
+        if (result) {
+          const pctx = preview.getContext('2d');
+          pctx.clearRect(0, 0, preview.width, preview.height);
+          pctx.drawImage(result.canvas, 0, 0, preview.width, preview.height);
+        }
+      }
     });
 
     window.addEventListener('beforeunload', () => {
-      if (stream) stream.getTracks().forEach(track => track.stop());
-      if (lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
+      cancelAnimationFrame(STATE.previewRAF);
+      if (STATE.stream) STATE.stream.getTracks().forEach(track => track.stop());
+      if (STATE.lastBlobUrl) URL.revokeObjectURL(STATE.lastBlobUrl);
     });
 
     buildModeButtons();
