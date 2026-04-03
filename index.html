@@ -243,17 +243,15 @@
     .capture-btn:active { transform: scale(.97); }
     .capture-btn:disabled { opacity: .55; cursor: wait; }
 
-    .capture-actions {
-      display: none;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      width: 100%;
+    .pill-btn:disabled {
+      opacity: .42;
+      cursor: not-allowed;
     }
 
-    .capture-actions.show { display: flex; }
-
-    .hidden { display: none !important; }
+    .save-btn {
+      min-width: 86px;
+      text-align: center;
+    }
 
     @media (max-width: 720px) {
       body { padding: 0; }
@@ -310,10 +308,7 @@
 
         <div class="capture-row">
           <button id="captureBtn" class="capture-btn" type="button" aria-label="Capture photo" disabled></button>
-          <div id="captureActions" class="capture-actions" aria-live="polite">
-            <button id="retakeBtn" class="pill-btn" type="button">Retake</button>
-            <button id="saveBtn" class="pill-btn" type="button">Save</button>
-          </div>
+          <button id="saveBtn" class="pill-btn save-btn" type="button" disabled>Save</button>
         </div>
       </div>
     </div>
@@ -324,9 +319,7 @@
     const preview = document.getElementById('preview');
     const output = document.getElementById('output');
     const captureBtn = document.getElementById('captureBtn');
-    const retakeBtn = document.getElementById('retakeBtn');
     const saveBtn = document.getElementById('saveBtn');
-    const captureActions = document.getElementById('captureActions');
     const viewer = document.getElementById('viewer');
     const modeBadge = document.getElementById('modeBadge');
     const modeRow = document.getElementById('modeRow');
@@ -437,6 +430,42 @@
           lowLightNoiseBoost: 2,
           lowLightBloomBoost: 0.02,
           lowLightContrastBoost: 0.01
+        }
+      },
+      instax: {
+        badge: 'Instax',
+        label: 'Instax',
+        filePrefix: 'instax_soft',
+        previewLongEdge: 820,
+        maxLongEdge: 1560,
+        outputQuality: 0.92,
+        profile: {
+          contrast: 0.93,
+          exposure: 1.08,
+          saturation: 0.86,
+          warmthR: 1.03,
+          warmthG: 1.0,
+          warmthB: 1.05,
+          blackLift: 12,
+          highlightPush: 0.16,
+          noise: 8,
+          colorNoise: 3,
+          vignette: 0.06,
+          hotspot: 0.09,
+          chromaShift: 0.28,
+          sharpen: 0.02,
+          blur: 0.1,
+          flashBloom: 0.08,
+          barrel: 0,
+          blockiness: 0.04,
+          haze: 0.14,
+          magentaBoost: 1.2,
+          coolBoost: 2.2,
+          edgeFade: 0.12,
+          lowLightExposureBoost: 0.08,
+          lowLightNoiseBoost: 1.8,
+          lowLightBloomBoost: 0.06,
+          lowLightContrastBoost: 0.03
         }
       }
     };
@@ -908,6 +937,11 @@
       };
     }
 
+    function updateCaptureUi() {
+      captureBtn.setAttribute('aria-label', STATE.captured ? 'Retake photo' : 'Capture photo');
+      saveBtn.disabled = !STATE.captured;
+    }
+
     function syncPreviewCanvas() {
       const dpr = Math.min(window.devicePixelRatio || 1, 1.4);
       const width = Math.max(1, Math.round(viewer.clientWidth * dpr));
@@ -992,6 +1026,7 @@
       });
       modeRow.appendChild(fragment);
       setMode(STATE.mode);
+      updateCaptureUi();
     }
 
     async function capturePhoto() {
@@ -1014,8 +1049,7 @@
       output.style.display = 'block';
 
       STATE.captured = true;
-      captureBtn.classList.add('hidden');
-      captureActions.classList.add('show');
+      updateCaptureUi();
       hideToast();
       showToast('Tap save to download');
       captureBtn.disabled = false;
@@ -1025,8 +1059,7 @@
       output.style.display = 'none';
       preview.style.display = 'block';
       STATE.captured = false;
-      captureActions.classList.remove('show');
-      captureBtn.classList.remove('hidden');
+      updateCaptureUi();
       hideToast();
       setMode(STATE.mode);
     }
@@ -1089,6 +1122,7 @@
 
       captureBtn.disabled = false;
       hideToast();
+      updateCaptureUi();
       syncPreviewCanvas();
       startPreviewLoop();
     }
@@ -1106,8 +1140,13 @@
       }
     }
 
-    captureBtn.addEventListener('click', capturePhoto);
-    retakeBtn.addEventListener('click', retake);
+    captureBtn.addEventListener('click', () => {
+      if (STATE.captured) {
+        retake();
+      } else {
+        capturePhoto();
+      }
+    });
     saveBtn.addEventListener('click', saveCurrentImage);
     fullscreenBtn.addEventListener('click', toggleFullscreen);
 
