@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>Y2K Digicam Camera</title>
+  <title>Vintage Camera</title>
   <style>
     :root {
       --bg: #050507;
@@ -403,38 +403,40 @@
           lowLightContrastBoost: 0.01
         }
       },
-      fisheye: {
-        badge: 'Fisheye Y2K',
-        label: 'Fisheye Y2K',
-        filePrefix: 'fisheye_y2k',
-        previewLongEdge: 760,
-        maxLongEdge: 1420,
-        outputQuality: 0.89,
+      instant: {
+        badge: 'Instant soft',
+        label: 'Instant soft',
+        filePrefix: 'instant_soft',
+        previewLongEdge: 780,
+        maxLongEdge: 1480,
+        outputQuality: 0.91,
         profile: {
-          contrast: 1.12,
-          exposure: 1.07,
-          saturation: 1.09,
-          warmthR: 1.04,
-          warmthG: 0.98,
-          warmthB: 0.99,
-          blackLift: 11,
-          highlightPush: 0.22,
-          noise: 19,
-          colorNoise: 10,
-          vignette: 0.26,
-          hotspot: 0.09,
-          chromaShift: 1.9,
-          sharpen: 0.07,
-          flashBloom: 0.12,
-          barrel: 0.22,
-          blockiness: 0.42,
-          haze: 0.04,
-          magentaBoost: 7,
-          coolBoost: 1.5,
-          lowLightExposureBoost: 0.09,
-          lowLightNoiseBoost: 4,
-          lowLightBloomBoost: 0.05,
-          lowLightContrastBoost: 0.03
+          contrast: 0.86,
+          exposure: 1.05,
+          saturation: 0.82,
+          warmthR: 1.05,
+          warmthG: 1.0,
+          warmthB: 0.95,
+          blackLift: 20,
+          highlightPush: 0.08,
+          noise: 13,
+          colorNoise: 5,
+          vignette: 0.08,
+          hotspot: 0.03,
+          chromaShift: 0.45,
+          sharpen: 0.01,
+          blur: 0.14,
+          flashBloom: 0.05,
+          barrel: 0,
+          blockiness: 0.05,
+          haze: 0.18,
+          magentaBoost: 2.5,
+          coolBoost: 1,
+          edgeFade: 0.24,
+          lowLightExposureBoost: 0.05,
+          lowLightNoiseBoost: 2,
+          lowLightBloomBoost: 0.02,
+          lowLightContrastBoost: 0.01
         }
       }
     };
@@ -552,12 +554,14 @@
         hotspot: base.hotspot + (lowLight ? 0.03 * darkAmount : 0),
         chromaShift: base.chromaShift,
         sharpen: base.sharpen,
+        blur: base.blur || 0,
         flashBloom: base.flashBloom + (lowLight ? base.lowLightBloomBoost * darkAmount : 0),
         barrel: base.barrel,
         blockiness: base.blockiness,
         haze: base.haze + (lowLight ? 0.03 * darkAmount : 0),
         magentaBoost: base.magentaBoost,
         coolBoost: base.coolBoost,
+        edgeFade: base.edgeFade || 0,
         lowLight
       };
     }
@@ -642,6 +646,40 @@
       softCtx.drawImage(sourceCanvas, 0, 0, softCanvas.width, softCanvas.height);
       ctx.imageSmoothingEnabled = true;
       ctx.drawImage(softCanvas, 0, 0, softCanvas.width, softCanvas.height, 0, 0, width, height);
+    }
+
+    function blurPass(ctx, width, height, amount) {
+      if (amount <= 0.005) return;
+
+      const softCanvas = document.createElement('canvas');
+      const softScale = Math.max(0.58, 1 - amount * 0.55);
+      softCanvas.width = Math.max(1, Math.round(width * softScale));
+      softCanvas.height = Math.max(1, Math.round(height * softScale));
+      const sctx = softCanvas.getContext('2d');
+      sctx.imageSmoothingEnabled = true;
+      sctx.drawImage(ctx.canvas, 0, 0, softCanvas.width, softCanvas.height);
+
+      ctx.save();
+      ctx.globalAlpha = Math.min(0.42, 0.18 + amount * 0.85);
+      ctx.filter = `blur(${Math.max(1.2, width * amount * 0.006)}px)`;
+      ctx.drawImage(softCanvas, 0, 0, softCanvas.width, softCanvas.height, 0, 0, width, height);
+      ctx.restore();
+    }
+
+    function drawSoftEdgeFade(ctx, width, height, strength) {
+      if (strength <= 0.01) return;
+
+      const fade = ctx.createRadialGradient(
+        width / 2, height / 2, Math.min(width, height) * 0.28,
+        width / 2, height / 2, Math.max(width, height) * 0.82
+      );
+      fade.addColorStop(0, 'rgba(255,247,238,0)');
+      fade.addColorStop(0.66, `rgba(255,247,238,${strength * 0.08})`);
+      fade.addColorStop(1, `rgba(255,247,238,${strength * 0.34})`);
+      ctx.save();
+      ctx.fillStyle = fade;
+      ctx.fillRect(0, 0, width, height);
+      ctx.restore();
     }
 
     function primaryColorPass(imageData, width, height, profile) {
@@ -858,9 +896,11 @@
       rctx.putImageData(frame, 0, 0);
 
       flashBloomPass(rctx, renderCanvas.width, renderCanvas.height, profile.flashBloom);
+      blurPass(rctx, renderCanvas.width, renderCanvas.height, profile.blur);
       sharpenPass(rctx, renderCanvas.width, renderCanvas.height, profile.sharpen);
       blockArtifactsPass(rctx, renderCanvas.width, renderCanvas.height, profile.blockiness);
       drawVignette(rctx, renderCanvas.width, renderCanvas.height, profile.vignette);
+      drawSoftEdgeFade(rctx, renderCanvas.width, renderCanvas.height, profile.edgeFade);
 
       return {
         canvas: renderCanvas,
