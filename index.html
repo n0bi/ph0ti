@@ -332,10 +332,11 @@
         badge: 'Disposable',
         label: 'Disposable',
         filePrefix: 'disposable_flash',
-        previewLongEdge: 780,
-        maxLongEdge: 1480,
+        previewLongEdge: 820,
+        maxLongEdge: 1520,
         outputQuality: 0.9,
         profile: {
+          cropZoom: 1.22,
           contrast: 1.14,
           exposure: 1.08,
           saturation: 1.05,
@@ -349,9 +350,11 @@
           vignette: 0.18,
           hotspot: 0.15,
           chromaShift: 1.3,
-          sharpen: 0.08,
+          sharpen: 0.1,
           flashBloom: 0.2,
-          barrel: 0,
+          barrel: 0.03,
+          edgeBlur: 0.22,
+          edgeBlurStart: 0.5,
           blockiness: 0.36,
           haze: 0.05,
           magentaBoost: 3,
@@ -366,10 +369,11 @@
         badge: 'CCD digicam',
         label: 'CCD digicam',
         filePrefix: 'ccd_digicam',
-        previewLongEdge: 820,
-        maxLongEdge: 1540,
+        previewLongEdge: 860,
+        maxLongEdge: 1580,
         outputQuality: 0.92,
         profile: {
+          cropZoom: 1.34,
           contrast: 0.96,
           exposure: 1.05,
           saturation: 0.9,
@@ -382,10 +386,12 @@
           colorNoise: 5,
           vignette: 0.1,
           hotspot: 0.04,
-          chromaShift: 0.9,
-          sharpen: 0.13,
+          chromaShift: 0.95,
+          sharpen: 0.16,
           flashBloom: 0.01,
-          barrel: 0,
+          barrel: 0.012,
+          edgeBlur: 0.08,
+          edgeBlurStart: 0.66,
           blockiness: 0.18,
           haze: 0.08,
           magentaBoost: 0,
@@ -400,10 +406,11 @@
         badge: 'Instant soft',
         label: 'Instant soft',
         filePrefix: 'instant_soft',
-        previewLongEdge: 780,
-        maxLongEdge: 1480,
+        previewLongEdge: 820,
+        maxLongEdge: 1520,
         outputQuality: 0.91,
         profile: {
+          cropZoom: 1.53,
           contrast: 0.86,
           exposure: 1.05,
           saturation: 0.82,
@@ -417,10 +424,12 @@
           vignette: 0.08,
           hotspot: 0.03,
           chromaShift: 0.45,
-          sharpen: 0.01,
+          sharpen: 0.015,
           blur: 0.14,
           flashBloom: 0.05,
-          barrel: 0,
+          barrel: 0.014,
+          edgeBlur: 0.18,
+          edgeBlurStart: 0.56,
           blockiness: 0.05,
           haze: 0.18,
           magentaBoost: 2.5,
@@ -436,10 +445,11 @@
         badge: 'Instax',
         label: 'Instax',
         filePrefix: 'instax_soft',
-        previewLongEdge: 820,
-        maxLongEdge: 1560,
+        previewLongEdge: 860,
+        maxLongEdge: 1600,
         outputQuality: 0.92,
         profile: {
+          cropZoom: 1.3,
           contrast: 0.93,
           exposure: 1.08,
           saturation: 0.86,
@@ -453,10 +463,12 @@
           vignette: 0.06,
           hotspot: 0.09,
           chromaShift: 0.28,
-          sharpen: 0.02,
+          sharpen: 0.03,
           blur: 0.1,
           flashBloom: 0.08,
-          barrel: 0,
+          barrel: 0.01,
+          edgeBlur: 0.11,
+          edgeBlurStart: 0.62,
           blockiness: 0.04,
           haze: 0.14,
           magentaBoost: 1.2,
@@ -539,6 +551,17 @@
       return { sx, sy, sw, sh };
     }
 
+    function applyCenterZoomToCrop(crop, srcWidth, srcHeight, zoom = 1) {
+      if (!zoom || zoom <= 1) return crop;
+
+      const sw = crop.sw / zoom;
+      const sh = crop.sh / zoom;
+      const sx = Math.max(0, Math.min(srcWidth - sw, crop.sx + (crop.sw - sw) / 2));
+      const sy = Math.max(0, Math.min(srcHeight - sh, crop.sy + (crop.sh - sh) / 2));
+
+      return { sx, sy, sw, sh };
+    }
+
     function sceneStats(data) {
       let lum = 0;
       let sat = 0;
@@ -569,6 +592,7 @@
       const saturationBias = clamp((stats.saturation - 0.32) * 1.6, -0.12, 0.12);
 
       return {
+        cropZoom: base.cropZoom || 1,
         contrast: base.contrast + (lowLight ? base.lowLightContrastBoost * darkAmount : 0),
         exposure: base.exposure + (lowLight ? base.lowLightExposureBoost * darkAmount : 0),
         saturation: base.saturation + saturationBias,
@@ -586,6 +610,8 @@
         blur: base.blur || 0,
         flashBloom: base.flashBloom + (lowLight ? base.lowLightBloomBoost * darkAmount : 0),
         barrel: base.barrel,
+        edgeBlur: base.edgeBlur || 0,
+        edgeBlurStart: base.edgeBlurStart || 0.6,
         blockiness: base.blockiness,
         haze: base.haze + (lowLight ? 0.03 * darkAmount : 0),
         magentaBoost: base.magentaBoost,
@@ -595,11 +621,12 @@
       };
     }
 
-    function drawCoveredFrame(targetCanvas, longEdgeCap) {
+    function drawCoveredFrame(targetCanvas, longEdgeCap, cropZoom = 1) {
       const sourceWidth = video.videoWidth;
       const sourceHeight = video.videoHeight;
       const aspect = getViewerAspect();
-      const crop = getCoverCrop(sourceWidth, sourceHeight, aspect);
+      const baseCrop = getCoverCrop(sourceWidth, sourceHeight, aspect);
+      const crop = applyCenterZoomToCrop(baseCrop, sourceWidth, sourceHeight, cropZoom);
       const fitted = fitSize(crop.sw, crop.sh, longEdgeCap);
 
       targetCanvas.width = fitted.width;
@@ -874,6 +901,37 @@
       ctx.restore();
     }
 
+    function edgeBlurPass(ctx, width, height, amount, start) {
+      if (amount <= 0.01) return;
+
+      const overlay = document.createElement('canvas');
+      overlay.width = width;
+      overlay.height = height;
+      const octx = overlay.getContext('2d');
+      const blurRadius = Math.max(1.6, Math.min(7, width * amount * 0.01));
+
+      octx.filter = `blur(${blurRadius}px)`;
+      octx.drawImage(ctx.canvas, 0, 0, width, height);
+      octx.filter = 'none';
+      octx.globalCompositeOperation = 'destination-in';
+
+      const gradient = octx.createRadialGradient(
+        width / 2, height / 2, Math.min(width, height) * Math.max(0.18, start * 0.42),
+        width / 2, height / 2, Math.max(width, height) * 0.74
+      );
+      gradient.addColorStop(0, 'rgba(255,255,255,0)');
+      gradient.addColorStop(Math.max(0.01, Math.min(0.82, start)), 'rgba(255,255,255,0)');
+      gradient.addColorStop(1, 'rgba(255,255,255,1)');
+      octx.fillStyle = gradient;
+      octx.fillRect(0, 0, width, height);
+      octx.globalCompositeOperation = 'source-over';
+
+      ctx.save();
+      ctx.globalAlpha = Math.min(0.95, amount * 1.3);
+      ctx.drawImage(overlay, 0, 0, width, height);
+      ctx.restore();
+    }
+
     function drawVignette(ctx, width, height, strength) {
       const gradient = ctx.createRadialGradient(
         width / 2, height / 2, Math.min(width, height) * 0.18,
@@ -902,10 +960,13 @@
       if (!sourceWidth || !sourceHeight) return null;
 
       let sourceCanvas = document.createElement('canvas');
-      const { ctx: sourceCtx, width, height } = drawCoveredFrame(sourceCanvas, longEdgeCap);
-      const scan = sourceCtx.getImageData(0, 0, width, height);
+      const initialFrame = drawCoveredFrame(sourceCanvas, longEdgeCap);
+      const scan = initialFrame.ctx.getImageData(0, 0, initialFrame.width, initialFrame.height);
       const stats = sceneStats(scan.data);
       const profile = buildProfile(modeKey, stats);
+
+      sourceCanvas = document.createElement('canvas');
+      drawCoveredFrame(sourceCanvas, longEdgeCap, profile.cropZoom);
 
       if (profile.barrel) {
         sourceCanvas = applyBarrelWarp(sourceCanvas, profile.barrel);
@@ -926,6 +987,7 @@
 
       flashBloomPass(rctx, renderCanvas.width, renderCanvas.height, profile.flashBloom);
       blurPass(rctx, renderCanvas.width, renderCanvas.height, profile.blur);
+      edgeBlurPass(rctx, renderCanvas.width, renderCanvas.height, profile.edgeBlur, profile.edgeBlurStart);
       sharpenPass(rctx, renderCanvas.width, renderCanvas.height, profile.sharpen);
       blockArtifactsPass(rctx, renderCanvas.width, renderCanvas.height, profile.blockiness);
       drawVignette(rctx, renderCanvas.width, renderCanvas.height, profile.vignette);
