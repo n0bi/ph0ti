@@ -1,34 +1,3 @@
-# Spotify Remote Dashboard
+It uses the browser camera API to request permission and capture from the device camera, then applies the look locally in canvas. Camera access requires user permission and a secure context, so run it on HTTPS or localhost rather than plain HTTP.
 
-This is a browser-based Spotify dashboard for Android or desktop. It uses Spotify's Web Playback SDK plus the Authorization Code with PKCE flow.
-
-## What it does
-- shows album art, track name, artist, and album
-- previous / play-pause / next buttons
-- volume slider
-- signs in with your own Spotify account
-- creates a Spotify Connect device in the browser
-
-## What you need
-- Spotify Premium
-- your own Spotify developer app Client ID
-- a real page URL hosted over HTTPS, or `http://127.0.0.1` for local testing
-
-## Setup
-1. Host `spotify_dashboard.html` somewhere with HTTPS.
-2. Open the page once and copy the exact Redirect URI shown in the page.
-3. In the Spotify Developer Dashboard, create an app.
-4. Add that exact Redirect URI to the app settings.
-5. Open the page again, paste your Client ID, and tap **Save settings**.
-6. Tap **Sign in with Spotify**.
-7. After you return, tap **Activate audio**.
-8. Tap **Use this device**.
-9. If playback does not start immediately, start a track once in Spotify and tap **Use this device** again.
-
-## Personal-use setup
-If you only want this to work with your account, keep the app in Spotify Development Mode and only authorize your own account.
-
-## Notes
-- Client IDs are public. Do not paste your Client Secret into this page.
-- The page stores tokens in browser localStorage for convenience.
-- To fully reset it, use the Sign out button and clear site storage in your browser if needed.
+The effect is tuned around the traits you’re pointing at in the references: flatter direct-flash-style lighting, reduced dynamic range, visible sensor/JPEG roughness, mild chromatic fringing, and compression damage. Those choices line up with general digital imaging behavior like limited dynamic range, JPEG processing, sensor noise patterns, and the flatter frontal look associated with on-camera flash.
