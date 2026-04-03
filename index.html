@@ -411,7 +411,7 @@
         maxLongEdge: 1520,
         outputQuality: 0.91,
         profile: {
-          cropZoom: 1.7,
+          cropZoom: 1.78,
           contrast: 0.84,
           exposure: 1.04,
           saturation: 0.8,
@@ -422,20 +422,20 @@
           highlightPush: 0.08,
           noise: 13,
           colorNoise: 5,
-          vignette: 0.09,
+          vignette: 0.11,
           hotspot: 0.03,
           chromaShift: 0.38,
           sharpen: 0.01,
           blur: 0.16,
           flashBloom: 0.05,
-          barrel: 0.008,
-          edgeBlur: 0.28,
-          edgeBlurStart: 0.42,
+          barrel: 0.01,
+          edgeBlur: 0.34,
+          edgeBlurStart: 0.34,
           blockiness: 0.05,
           haze: 0.2,
           magentaBoost: 2.5,
           coolBoost: 0.8,
-          edgeFade: 0.3,
+          edgeFade: 0.38,
           lowLightExposureBoost: 0.05,
           lowLightNoiseBoost: 2,
           lowLightBloomBoost: 0.02,
@@ -450,7 +450,7 @@
         maxLongEdge: 1600,
         outputQuality: 0.92,
         profile: {
-          cropZoom: 1.48,
+          cropZoom: 1.56,
           contrast: 0.92,
           exposure: 1.08,
           saturation: 0.84,
@@ -461,20 +461,20 @@
           highlightPush: 0.16,
           noise: 8,
           colorNoise: 3,
-          vignette: 0.07,
+          vignette: 0.08,
           hotspot: 0.09,
           chromaShift: 0.26,
           sharpen: 0.03,
           blur: 0.1,
           flashBloom: 0.08,
-          barrel: 0.008,
-          edgeBlur: 0.18,
-          edgeBlurStart: 0.5,
+          barrel: 0.009,
+          edgeBlur: 0.24,
+          edgeBlurStart: 0.4,
           blockiness: 0.04,
           haze: 0.14,
           magentaBoost: 1.2,
           coolBoost: 2.2,
-          edgeFade: 0.16,
+          edgeFade: 0.22,
           lowLightExposureBoost: 0.08,
           lowLightNoiseBoost: 1.8,
           lowLightBloomBoost: 0.06,
@@ -1080,17 +1080,17 @@
       const sctx = scratch.getContext('2d');
 
       faces.forEach((face) => {
-        const padX = face.width * 0.18;
-        const padY = face.height * 0.22;
+        const padX = face.width * 0.24;
+        const padY = face.height * 0.28;
         const x = Math.max(0, Math.floor(face.x - padX));
         const y = Math.max(0, Math.floor(face.y - padY));
         const w = Math.min(canvas.width - x, Math.ceil(face.width + padX * 2));
         const h = Math.min(canvas.height - y, Math.ceil(face.height + padY * 2));
         if (w < 4 || h < 4) return;
 
-        const px = Math.max(6, Math.round(Math.min(w, h) / lerp(10, 6, strength)));
-        const smallW = Math.max(1, Math.round(w / px));
-        const smallH = Math.max(1, Math.round(h / px));
+        const pixelSize = Math.max(8, Math.round(Math.min(w, h) / lerp(11, 5.5, strength)));
+        const smallW = Math.max(1, Math.round(w / pixelSize));
+        const smallH = Math.max(1, Math.round(h / pixelSize));
         scratch.width = smallW;
         scratch.height = smallH;
         sctx.imageSmoothingEnabled = true;
@@ -1100,8 +1100,12 @@
         ctx.save();
         ctx.imageSmoothingEnabled = false;
         ctx.drawImage(scratch, 0, 0, smallW, smallH, x, y, w, h);
-        ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-        ctx.lineWidth = Math.max(1, canvas.width * 0.0018);
+        ctx.globalAlpha = 0.18;
+        ctx.fillStyle = '#111';
+        ctx.fillRect(x, y, w, h);
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+        ctx.lineWidth = Math.max(1, canvas.width * 0.0016);
         ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
         ctx.restore();
       });
@@ -1113,7 +1117,7 @@
       lowCanvas.height = Math.max(120, Math.round(height * lerp(0.36, 0.24, strength)));
       const lctx = lowCanvas.getContext('2d');
       lctx.imageSmoothingEnabled = true;
-      lctx.filter = `blur(${Math.max(0.6, width * 0.0012)}px)`;
+      lctx.filter = `blur(${Math.max(0.8, width * 0.0014)}px)`;
       lctx.drawImage(ctx.canvas, 0, 0, lowCanvas.width, lowCanvas.height);
       lctx.filter = 'none';
 
@@ -1132,78 +1136,54 @@
       bctx.filter = 'none';
 
       ctx.save();
-      ctx.globalAlpha = 0.14 + strength * 0.12;
+      ctx.globalAlpha = 0.16 + strength * 0.12;
       ctx.drawImage(bleedCanvas, 1 + (phase % 2), 0);
-      ctx.globalAlpha = 0.09 + strength * 0.09;
+      ctx.globalAlpha = 0.12 + strength * 0.08;
       ctx.drawImage(bleedCanvas, -1, 0);
       ctx.restore();
 
-      const frame = ctx.getImageData(0, 0, width, height);
-      const data = frame.data;
+      const base = ctx.getImageData(0, 0, width, height);
+      const data = base.data;
+      const original = new Uint8ClampedArray(data);
+      const maxJitter = Math.max(1, Math.round(1 + strength * 2.6));
       for (let y = 0; y < height; y++) {
-        const lineJitter = Math.round(Math.sin((y + phase * 3) * 0.11) * strength * 1.7);
-        const lineNoise = (Math.random() * 2 - 1) * (5 + strength * 10);
+        const wave = Math.sin((y * 0.045) + phase * 0.75) * maxJitter;
+        const drift = Math.sin((y * 0.013) + phase * 0.24) * (0.6 + strength * 1.1);
+        const xShift = Math.round(wave + drift);
+        const lineLuma = (Math.random() * 2 - 1) * (3 + strength * 5);
+        const chromaJitter = Math.round(Math.sin((y * 0.081) + phase * 0.4) * (0.8 + strength * 1.3));
         for (let x = 0; x < width; x++) {
           const i = ((y * width) + x) * 4;
-          const oddLine = y % 2 === phase % 2;
-          const dim = oddLine ? (0.86 - strength * 0.08) : (0.97 - strength * 0.03);
-          const srcX = Math.max(0, Math.min(width - 1, x + lineJitter));
+          const srcX = Math.max(0, Math.min(width - 1, x + xShift));
+          const srcR = Math.max(0, Math.min(width - 1, srcX + chromaJitter));
+          const srcB = Math.max(0, Math.min(width - 1, srcX - chromaJitter));
           const si = ((y * width) + srcX) * 4;
+          const sri = ((y * width) + srcR) * 4;
+          const sbi = ((y * width) + srcB) * 4;
 
-          let r = data[si] * dim;
-          let g = data[si + 1] * dim;
-          let b = data[si + 2] * dim;
-
-          if (oddLine) {
-            r += 2;
-            b -= 2;
-          }
-
-          const lumaBump = lineNoise + (Math.random() * 2 - 1) * 4;
-          data[i] = clamp(r + lumaBump);
-          data[i + 1] = clamp(g + lumaBump * 0.9);
-          data[i + 2] = clamp(b + lumaBump * 1.15);
+          data[i] = clamp(original[sri] + lineLuma + (Math.random() * 2 - 1) * 3.5);
+          data[i + 1] = clamp(original[si + 1] + lineLuma * 0.85 + (Math.random() * 2 - 1) * 2.5);
+          data[i + 2] = clamp(original[sbi + 2] + lineLuma * 1.05 + (Math.random() * 2 - 1) * 4.5);
         }
       }
-      ctx.putImageData(frame, 0, 0);
+      ctx.putImageData(base, 0, 0);
 
       ctx.save();
-      ctx.globalAlpha = 0.08 + strength * 0.08;
-      ctx.fillStyle = '#fff';
-      for (let y = 0; y < height; y += 2) {
-        ctx.fillRect(0, y, width, 1);
-      }
+      ctx.globalAlpha = 0.08 + strength * 0.06;
+      const sidePulse = ctx.createLinearGradient(0, 0, width, 0);
+      sidePulse.addColorStop(0, 'rgba(255,255,255,0.18)');
+      sidePulse.addColorStop(0.08, 'rgba(255,255,255,0)');
+      sidePulse.addColorStop(0.92, 'rgba(255,255,255,0)');
+      sidePulse.addColorStop(1, 'rgba(255,255,255,0.1)');
+      ctx.fillStyle = sidePulse;
+      ctx.fillRect(0, 0, width, height);
       ctx.restore();
 
       ctx.save();
-      ctx.globalAlpha = 0.11 + strength * 0.14;
-      const bandY = Math.round(height * 0.92);
-      const grad = ctx.createLinearGradient(0, bandY, 0, height);
-      grad.addColorStop(0, 'rgba(255,255,255,0)');
-      grad.addColorStop(1, 'rgba(255,255,255,1)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, bandY, width, height - bandY);
-      ctx.restore();
-
-      ctx.save();
-      ctx.globalAlpha = 0.22;
-      for (let i = 0; i < 2; i++) {
-        const y = Math.random() * height;
-        const h = Math.max(1, Math.round(height * (0.002 + Math.random() * 0.006)));
-        const grad = ctx.createLinearGradient(0, y, width, y + h);
-        grad.addColorStop(0, 'rgba(255,255,255,0)');
-        grad.addColorStop(0.5, `rgba(255,255,255,${0.25 + Math.random() * 0.25})`);
-        grad.addColorStop(1, 'rgba(255,255,255,0)');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, y, width, h);
-      }
-      ctx.restore();
-
-      ctx.save();
-      ctx.globalAlpha = 0.14 + strength * 0.08;
-      ctx.fillStyle = 'rgba(0,0,0,0.9)';
-      ctx.fillRect(0, 0, width, Math.max(2, height * 0.01));
-      ctx.fillRect(0, height - Math.max(2, height * 0.012), width, Math.max(2, height * 0.012));
+      ctx.globalAlpha = 0.12 + strength * 0.08;
+      ctx.fillStyle = 'rgba(0,0,0,0.92)';
+      ctx.fillRect(0, 0, width, Math.max(2, height * 0.008));
+      ctx.fillRect(0, height - Math.max(2, height * 0.01), width, Math.max(2, height * 0.01));
       ctx.restore();
     }
 
@@ -1252,8 +1232,8 @@
 
       if (modeKey === 'vcr') {
         const faces = await detectFacesOnCanvas(sourceCanvas, !!options.forceFaceDetection);
-        applyMosaicToFaces(rctx, faces, 1);
         applyVcrPass(rctx, renderCanvas.width, renderCanvas.height, profile.vcrStrength, STATE.vcrFieldPhase);
+        applyMosaicToFaces(rctx, faces, 1);
       }
 
       return {
