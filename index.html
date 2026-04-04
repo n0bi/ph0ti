@@ -3,6 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="preconnect" href="https://storage.googleapis.com" crossorigin />
   <title>Vintage Camera</title>
   <style>
     :root {
@@ -240,6 +242,18 @@
       box-shadow: inset 0 -10px 16px rgba(0,0,0,.14), inset 0 10px 14px rgba(255,255,255,.14);
     }
 
+    .capture-btn.is-retake::after {
+      content: "↻";
+      position: absolute;
+      color: rgba(255,255,255,.96);
+      font-size: 28px;
+      line-height: 1;
+      font-weight: 700;
+      text-shadow: 0 2px 10px rgba(0,0,0,.28);
+      transform: translateY(-1px);
+      pointer-events: none;
+    }
+
     .capture-btn:active { transform: scale(.97); }
     .capture-btn:disabled { opacity: .55; cursor: wait; }
 
@@ -327,6 +341,11 @@
     const fullscreenBtn = document.getElementById('fullscreenBtn');
     const toast = document.getElementById('toast');
     const appRoot = document.getElementById('appRoot');
+
+    const MP_TASKS_VERSION = '0.10.34';
+    const MP_TASKS_MODULE_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_TASKS_VERSION}/+esm`;
+    const MP_WASM_ROOT = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_TASKS_VERSION}/wasm`;
+    const MP_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite';
 
     const MODES = {
       disposable: {
@@ -482,41 +501,41 @@
         }
       },
       vcr: {
-        badge: 'VCR / CCTV',
-        label: 'VCR / CCTV',
-        filePrefix: 'vcr_cctv',
-        previewLongEdge: 640,
-        maxLongEdge: 960,
-        outputQuality: 0.84,
+        badge: 'VGA CCTV',
+        label: 'VGA CCTV',
+        filePrefix: 'vga_cctv',
+        previewLongEdge: 520,
+        maxLongEdge: 920,
+        outputQuality: 0.86,
         profile: {
           cropZoom: 1.1,
-          contrast: 0.94,
+          contrast: 0.97,
           exposure: 1.02,
-          saturation: 0.94,
-          warmthR: 1.03,
+          saturation: 1.02,
+          warmthR: 1.02,
           warmthG: 1.0,
-          warmthB: 0.99,
-          blackLift: 6,
-          highlightPush: 0.06,
-          noise: 8,
-          colorNoise: 3,
-          vignette: 0.03,
+          warmthB: 1.01,
+          blackLift: 4,
+          highlightPush: 0.05,
+          noise: 5.2,
+          colorNoise: 1.8,
+          vignette: 0.02,
           hotspot: 0,
-          chromaShift: 0.22,
-          sharpen: 0.08,
-          blur: 0.14,
+          chromaShift: 0.16,
+          sharpen: 0.14,
+          blur: 0.07,
           flashBloom: 0,
           barrel: 0,
           edgeBlur: 0,
           edgeBlurStart: 0.7,
-          blockiness: 0.2,
-          haze: 0.02,
-          magentaBoost: 1.4,
-          coolBoost: 0.3,
+          blockiness: 0.1,
+          haze: 0.01,
+          magentaBoost: 0.8,
+          coolBoost: 0.18,
           edgeFade: 0,
-          vcrStrength: 0.36,
+          vcrStrength: 0.22,
           lowLightExposureBoost: 0.02,
-          lowLightNoiseBoost: 2.2,
+          lowLightNoiseBoost: 1.4,
           lowLightBloomBoost: 0,
           lowLightContrastBoost: 0.01
         }
@@ -530,12 +549,17 @@
       lastBlobUrl: '',
       toastTimer: 0,
       previewRAF: 0,
+      previewVideoFrameRequest: 0,
       lastPreviewTick: 0,
-      previewFPS: 10,
+      previewFPS: 12,
       renderBusy: false,
       faceDetector: null,
       faceDetectorChecked: false,
       faceDetectorNoticeShown: false,
+      faceDetectorLoadingPromise: null,
+      faceModulePromise: null,
+      faceVisionPromise: null,
+      faceWarmupScheduled: false,
       latestFaces: [],
       faceDetectPending: null,
       lastFaceDetectAt: 0,
@@ -1028,61 +1052,106 @@
       }).filter((box) => box.width > 1 && box.height > 1);
     }
 
-    async function ensureFaceDetector() {
-      if (STATE.faceDetectorChecked) return STATE.faceDetector;
-      STATE.faceDetectorChecked = true;
+
+    async function loadFaceDetectorDeps() {
+      if (!STATE.faceModulePromise) {
+        STATE.faceModulePromise = import(MP_TASKS_MODULE_URL);
+      }
+      const mediaPipe = await STATE.faceModulePromise;
+
+      if (!STATE.faceVisionPromise) {
+        STATE.faceVisionPromise = mediaPipe.FilesetResolver.forVisionTasks(MP_WASM_ROOT);
+      }
+
+      const vision = await STATE.faceVisionPromise;
+      return {
+        FaceDetectorClass: mediaPipe.FaceDetector,
+        vision
+      };
+    }
+
+    async function createFaceDetectorWithDelegate(delegate) {
+      const { FaceDetectorClass, vision } = await loadFaceDetectorDeps();
+      return FaceDetectorClass.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath: MP_MODEL_URL,
+          delegate
+        },
+        runningMode: 'VIDEO',
+        minDetectionConfidence: 0.42,
+        minSuppressionThreshold: 0.28
+      });
+    }
+
+    async function ensureFaceDetector(options = {}) {
+      const silent = !!options.silent;
+      if (STATE.faceDetector) return STATE.faceDetector;
+
+      if (STATE.faceDetectorLoadingPromise) {
+        if (!silent) showToast('Loading face mosaic model…', true);
+        try {
+          const detector = await STATE.faceDetectorLoadingPromise;
+          if (!silent && detector) hideToast();
+          return detector;
+        } catch (err) {
+          console.error(err);
+          if (!silent) showToast('Face mosaic model could not load', true);
+          return null;
+        }
+      }
+
+      STATE.faceDetectorLoadingPromise = (async () => {
+        try {
+          return await createFaceDetectorWithDelegate('GPU');
+        } catch (gpuErr) {
+          console.error(gpuErr);
+          return createFaceDetectorWithDelegate('CPU');
+        }
+      })();
+
+      if (!silent) showToast('Loading face mosaic model…', true);
 
       try {
-        showToast('Loading face mosaic model…', true);
-        const { FaceDetector: MPFaceDetector, FilesetResolver } = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/+esm');
-        const vision = await FilesetResolver.forVisionTasks(
-          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
-        );
-        STATE.faceDetector = await MPFaceDetector.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite',
-            delegate: 'GPU'
-          },
-          runningMode: 'VIDEO',
-          minDetectionConfidence: 0.42,
-          minSuppressionThreshold: 0.28
-        });
+        STATE.faceDetector = await STATE.faceDetectorLoadingPromise;
+        STATE.faceDetectorChecked = true;
         STATE.faceDetectorNoticeShown = false;
-        hideToast();
-      } catch (gpuErr) {
-        console.error(gpuErr);
-        try {
-          const { FaceDetector: MPFaceDetector, FilesetResolver } = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/+esm');
-          const vision = await FilesetResolver.forVisionTasks(
-            'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
-          );
-          STATE.faceDetector = await MPFaceDetector.createFromOptions(vision, {
-            baseOptions: {
-              modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite',
-              delegate: 'CPU'
-            },
-            runningMode: 'VIDEO',
-            minDetectionConfidence: 0.42,
-            minSuppressionThreshold: 0.28
-          });
-          STATE.faceDetectorNoticeShown = false;
-          hideToast();
-        } catch (cpuErr) {
-          console.error(cpuErr);
-          STATE.faceDetector = null;
-          if (!STATE.faceDetectorNoticeShown) {
-            STATE.faceDetectorNoticeShown = true;
-            showToast('Face mosaic model could not load', true);
-          }
+        if (!silent) hideToast();
+      } catch (err) {
+        console.error(err);
+        STATE.faceDetector = null;
+        STATE.faceDetectorChecked = false;
+        if (!silent && !STATE.faceDetectorNoticeShown) {
+          STATE.faceDetectorNoticeShown = true;
+          showToast('Face mosaic model could not load', true);
         }
+      } finally {
+        STATE.faceDetectorLoadingPromise = null;
       }
 
       return STATE.faceDetector;
     }
 
+    function scheduleFaceDetectorWarmup() {
+      if (STATE.faceWarmupScheduled || STATE.faceDetector || STATE.faceDetectorLoadingPromise) return;
+      STATE.faceWarmupScheduled = true;
+
+      const warm = () => {
+        ensureFaceDetector({ silent: true }).catch((err) => {
+          console.error(err);
+          STATE.faceWarmupScheduled = false;
+        });
+      };
+
+      if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(() => warm(), { timeout: 2200 });
+      } else {
+        window.setTimeout(warm, 900);
+      }
+    }
+
     function getDetectionCanvas(sourceCanvas) {
       const detectCanvas = document.createElement('canvas');
-      const maxLongEdge = 320;
+      const maxLongEdge = 240;
       const fitted = fitSize(sourceCanvas.width, sourceCanvas.height, maxLongEdge);
       detectCanvas.width = fitted.width;
       detectCanvas.height = fitted.height;
@@ -1098,7 +1167,7 @@
 
       const now = performance.now();
       if (!force && STATE.faceDetectPending) return STATE.latestFaces;
-      if (!force && now - STATE.lastFaceDetectAt < 180) return STATE.latestFaces;
+      if (!force && now - STATE.lastFaceDetectAt < 160) return STATE.latestFaces;
 
       STATE.lastFaceDetectAt = now;
       const scaleX = sourceCanvas.width;
@@ -1135,15 +1204,15 @@
       const sctx = scratch.getContext('2d');
 
       faces.forEach((face) => {
-        const padX = face.width * 0.24;
-        const padY = face.height * 0.28;
+        const padX = face.width * 0.1;
+        const padY = face.height * 0.12;
         const x = Math.max(0, Math.floor(face.x - padX));
         const y = Math.max(0, Math.floor(face.y - padY));
         const w = Math.min(canvas.width - x, Math.ceil(face.width + padX * 2));
         const h = Math.min(canvas.height - y, Math.ceil(face.height + padY * 2));
         if (w < 4 || h < 4) return;
 
-        const pixelSize = Math.max(4, Math.round(Math.min(w, h) / lerp(18, 10, strength)));
+        const pixelSize = Math.max(3, Math.round(Math.min(w, h) / lerp(28, 18, strength)));
         const smallW = Math.max(1, Math.round(w / pixelSize));
         const smallH = Math.max(1, Math.round(h / pixelSize));
         scratch.width = smallW;
@@ -1153,26 +1222,25 @@
         sctx.drawImage(canvas, x, y, w, h, 0, 0, smallW, smallH);
 
         ctx.save();
+        ctx.beginPath();
+        ctx.ellipse(x + w / 2, y + h / 2, w * 0.46, h * 0.5, 0, 0, Math.PI * 2);
+        ctx.clip();
         ctx.imageSmoothingEnabled = false;
         ctx.drawImage(scratch, 0, 0, smallW, smallH, x, y, w, h);
-        ctx.globalAlpha = 0.08;
+        ctx.globalAlpha = 0.05;
         ctx.fillStyle = '#111';
         ctx.fillRect(x, y, w, h);
-        ctx.globalAlpha = 1;
-        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-        ctx.lineWidth = Math.max(1, canvas.width * 0.0012);
-        ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
         ctx.restore();
       });
     }
 
     function applyVcrPass(ctx, width, height, strength, phase = 0) {
       const lowCanvas = document.createElement('canvas');
-      lowCanvas.width = Math.max(220, Math.round(width * lerp(0.52, 0.4, strength)));
-      lowCanvas.height = Math.max(160, Math.round(height * lerp(0.52, 0.4, strength)));
+      lowCanvas.width = Math.max(280, Math.round(width * lerp(0.74, 0.62, strength)));
+      lowCanvas.height = Math.max(200, Math.round(height * lerp(0.74, 0.62, strength)));
       const lctx = lowCanvas.getContext('2d');
       lctx.imageSmoothingEnabled = true;
-      lctx.filter = `blur(${Math.max(0.45, width * 0.00075)}px)`;
+      lctx.filter = `blur(${Math.max(0.16, width * 0.00032)}px)`;
       lctx.drawImage(ctx.canvas, 0, 0, lowCanvas.width, lowCanvas.height);
       lctx.filter = 'none';
 
@@ -1186,27 +1254,27 @@
       bleedCanvas.width = width;
       bleedCanvas.height = height;
       const bctx = bleedCanvas.getContext('2d');
-      bctx.filter = `blur(${Math.max(0.8, width * 0.0015)}px)`;
+      bctx.filter = `blur(${Math.max(0.28, width * 0.00065)}px)`;
       bctx.drawImage(ctx.canvas, 0, 0, width, height);
       bctx.filter = 'none';
 
       ctx.save();
-      ctx.globalAlpha = 0.08 + strength * 0.08;
+      ctx.globalAlpha = 0.03 + strength * 0.03;
       ctx.drawImage(bleedCanvas, 1, 0);
-      ctx.globalAlpha = 0.045 + strength * 0.04;
+      ctx.globalAlpha = 0.016 + strength * 0.02;
       ctx.drawImage(bleedCanvas, -1, 0);
       ctx.restore();
 
       const base = ctx.getImageData(0, 0, width, height);
       const data = base.data;
       const original = new Uint8ClampedArray(data);
-      const globalShift = Math.sin(phase * 0.17) * (0.18 + strength * 0.22);
+      const globalShift = Math.sin(phase * 0.12) * (0.08 + strength * 0.12);
       for (let y = 0; y < height; y++) {
-        const drift = Math.sin((y * 0.007) + phase * 0.05) * (0.12 + strength * 0.18);
-        const microWobble = Math.sin((y * 0.031) + phase * 0.11) * (0.08 + strength * 0.12);
+        const drift = Math.sin((y * 0.005) + phase * 0.03) * (0.04 + strength * 0.08);
+        const microWobble = Math.sin((y * 0.018) + phase * 0.07) * (0.03 + strength * 0.05);
         const xShift = Math.round(globalShift + drift + microWobble);
-        const rowLift = Math.sin((y * 0.017) + phase * 0.03) * (0.15 + strength * 0.28);
-        const chromaJitter = Math.round(Math.sin((y * 0.024) + phase * 0.08) * (0.22 + strength * 0.34));
+        const rowLift = Math.sin((y * 0.013) + phase * 0.025) * (0.06 + strength * 0.11);
+        const chromaJitter = Math.round(Math.sin((y * 0.015) + phase * 0.06) * (0.08 + strength * 0.14));
         for (let x = 0; x < width; x++) {
           const i = ((y * width) + x) * 4;
           const srcX = Math.max(0, Math.min(width - 1, x + xShift));
@@ -1216,23 +1284,12 @@
           const sri = ((y * width) + srcR) * 4;
           const sbi = ((y * width) + srcB) * 4;
 
-          data[i] = clamp(original[sri] + rowLift + (Math.random() * 2 - 1) * (0.85 + strength * 0.65));
-          data[i + 1] = clamp(original[si + 1] + rowLift * 0.7 + (Math.random() * 2 - 1) * (0.75 + strength * 0.55));
-          data[i + 2] = clamp(original[sbi + 2] + rowLift * 0.85 + (Math.random() * 2 - 1) * (0.95 + strength * 0.7));
+          data[i] = clamp(original[sri] + rowLift + (Math.random() * 2 - 1) * (0.38 + strength * 0.34));
+          data[i + 1] = clamp(original[si + 1] + rowLift * 0.58 + (Math.random() * 2 - 1) * (0.34 + strength * 0.28));
+          data[i + 2] = clamp(original[sbi + 2] + rowLift * 0.72 + (Math.random() * 2 - 1) * (0.4 + strength * 0.36));
         }
       }
       ctx.putImageData(base, 0, 0);
-
-      ctx.save();
-      ctx.globalAlpha = 0.035 + strength * 0.03;
-      const sidePulse = ctx.createLinearGradient(0, 0, width, 0);
-      sidePulse.addColorStop(0, 'rgba(255,255,255,0.12)');
-      sidePulse.addColorStop(0.04, 'rgba(255,255,255,0)');
-      sidePulse.addColorStop(0.96, 'rgba(255,255,255,0)');
-      sidePulse.addColorStop(1, 'rgba(255,255,255,0.06)');
-      ctx.fillStyle = sidePulse;
-      ctx.fillRect(0, 0, width, height);
-      ctx.restore();
     }
 
     async function processFrame(modeKey, longEdgeCap, options = {}) {
@@ -1240,13 +1297,19 @@
       const sourceHeight = video.videoHeight;
       if (!sourceWidth || !sourceHeight) return null;
 
-      let sourceCanvas = document.createElement('canvas');
-      const initialFrame = drawCoveredFrame(sourceCanvas, longEdgeCap);
-      const scan = initialFrame.ctx.getImageData(0, 0, initialFrame.width, initialFrame.height);
-      const stats = sceneStats(scan.data);
-      const profile = buildProfile(modeKey, stats);
+      const fastPreview = !!options.fastPreview;
+      let profile;
+      if (fastPreview && modeKey === 'vcr') {
+        profile = { ...MODES[modeKey].profile, lowLight: false };
+      } else {
+        const statsCanvas = document.createElement('canvas');
+        const initialFrame = drawCoveredFrame(statsCanvas, longEdgeCap);
+        const scan = initialFrame.ctx.getImageData(0, 0, initialFrame.width, initialFrame.height);
+        const stats = sceneStats(scan.data);
+        profile = buildProfile(modeKey, stats);
+      }
 
-      sourceCanvas = document.createElement('canvas');
+      let sourceCanvas = document.createElement('canvas');
       drawCoveredFrame(sourceCanvas, longEdgeCap, profile.cropZoom);
 
       if (profile.barrel) {
@@ -1259,7 +1322,7 @@
       const rctx = renderCanvas.getContext('2d', { willReadFrequently: true });
 
       rctx.clearRect(0, 0, renderCanvas.width, renderCanvas.height);
-      downsampleSoft(rctx, sourceCanvas, renderCanvas.width, renderCanvas.height, modeKey === 'vcr' ? 0.8 : 0.76);
+      downsampleSoft(rctx, sourceCanvas, renderCanvas.width, renderCanvas.height, modeKey === 'vcr' ? 0.88 : 0.76);
 
       let frame = rctx.getImageData(0, 0, renderCanvas.width, renderCanvas.height);
       frame = primaryColorPass(frame, renderCanvas.width, renderCanvas.height, profile);
@@ -1281,7 +1344,7 @@
       if (modeKey === 'vcr') {
         const faces = await detectFacesOnCanvas(sourceCanvas, !!options.forceFaceDetection);
         applyVcrPass(rctx, renderCanvas.width, renderCanvas.height, profile.vcrStrength, STATE.vcrFieldPhase);
-        applyMosaicToFaces(rctx, faces, 1);
+        applyMosaicToFaces(rctx, faces, 0.8);
       }
 
       return {
@@ -1292,6 +1355,7 @@
 
     function updateCaptureUi() {
       captureBtn.setAttribute('aria-label', STATE.captured ? 'Retake photo' : 'Capture photo');
+      captureBtn.classList.toggle('is-retake', STATE.captured);
       saveBtn.disabled = !STATE.captured;
     }
 
@@ -1306,8 +1370,6 @@
     }
 
     async function renderPreview(now = 0) {
-      STATE.previewRAF = requestAnimationFrame(renderPreview);
-
       if (STATE.captured || STATE.renderBusy) return;
       if (video.readyState < 2) return;
 
@@ -1321,7 +1383,7 @@
       const modeKey = STATE.mode;
       const mode = MODES[modeKey];
       try {
-        const result = await processFrame(modeKey, mode.previewLongEdge);
+        const result = await processFrame(modeKey, mode.previewLongEdge, { fastPreview: true });
         if (result && !STATE.captured && modeKey === STATE.mode) {
           const pctx = preview.getContext('2d');
           pctx.clearRect(0, 0, preview.width, preview.height);
@@ -1336,10 +1398,28 @@
       }
     }
 
+    function requestNextPreviewFrame() {
+      if (video.requestVideoFrameCallback) {
+        STATE.previewVideoFrameRequest = video.requestVideoFrameCallback((now) => {
+          requestNextPreviewFrame();
+          renderPreview(now);
+        });
+      } else {
+        STATE.previewRAF = requestAnimationFrame((now) => {
+          requestNextPreviewFrame();
+          renderPreview(now);
+        });
+      }
+    }
+
     function startPreviewLoop() {
       cancelAnimationFrame(STATE.previewRAF);
+      if (video.cancelVideoFrameCallback && STATE.previewVideoFrameRequest) {
+        video.cancelVideoFrameCallback(STATE.previewVideoFrameRequest);
+      }
+      STATE.previewVideoFrameRequest = 0;
       STATE.lastPreviewTick = 0;
-      STATE.previewRAF = requestAnimationFrame(renderPreview);
+      requestNextPreviewFrame();
     }
 
     async function setMode(modeKey) {
@@ -1359,7 +1439,7 @@
         syncPreviewCanvas();
         STATE.renderBusy = true;
         try {
-          const result = await processFrame(STATE.mode, mode.previewLongEdge);
+          const result = await processFrame(STATE.mode, mode.previewLongEdge, { fastPreview: true });
           if (result && modeKey === STATE.mode && !STATE.captured) {
             const pctx = preview.getContext('2d');
             pctx.clearRect(0, 0, preview.width, preview.height);
@@ -1461,8 +1541,8 @@
         audio: false,
         video: {
           facingMode: { ideal: 'environment' },
-          width: { ideal: 1920 },
-          height: { ideal: 1440 }
+          width: { ideal: 1280 },
+          height: { ideal: 960 }
         }
       };
 
@@ -1495,6 +1575,7 @@
       updateCaptureUi();
       syncPreviewCanvas();
       startPreviewLoop();
+      scheduleFaceDetectorWarmup();
     }
 
     async function toggleFullscreen() {
@@ -1536,6 +1617,9 @@
 
     window.addEventListener('beforeunload', () => {
       cancelAnimationFrame(STATE.previewRAF);
+      if (video.cancelVideoFrameCallback && STATE.previewVideoFrameRequest) {
+        video.cancelVideoFrameCallback(STATE.previewVideoFrameRequest);
+      }
       if (STATE.stream) STATE.stream.getTracks().forEach(track => track.stop());
       if (STATE.lastBlobUrl) URL.revokeObjectURL(STATE.lastBlobUrl);
     });
