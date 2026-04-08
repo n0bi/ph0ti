@@ -386,8 +386,8 @@
         }
       },
       ccd: {
-        badge: 'CCD digicam',
-        label: 'CCD digicam',
+        badge: 'Digicam',
+        label: 'Digicam',
         filePrefix: 'ccd_digicam',
         previewLongEdge: 860,
         maxLongEdge: 1580,
@@ -423,8 +423,8 @@
         }
       },
       instant: {
-        badge: 'Polaroid soft',
-        label: 'Polaroid soft',
+        badge: 'Polaroid',
+        label: 'Polaroid',
         filePrefix: 'polaroid_soft',
         previewLongEdge: 820,
         maxLongEdge: 1520,
@@ -509,35 +509,35 @@
         outputQuality: 0.86,
         profile: {
           cropZoom: 1.1,
-          contrast: 0.95,
-          exposure: 1.01,
-          saturation: 0.98,
-          warmthR: 1.03,
-          warmthG: 1.0,
-          warmthB: 1.02,
-          blackLift: 5,
-          highlightPush: 0.06,
-          noise: 5.9,
-          colorNoise: 2.2,
+          contrast: 0.91,
+          exposure: 0.99,
+          saturation: 0.83,
+          warmthR: 1.02,
+          warmthG: 0.99,
+          warmthB: 0.96,
+          blackLift: 7,
+          highlightPush: 0.03,
+          noise: 5.3,
+          colorNoise: 1.8,
           vignette: 0.03,
           hotspot: 0,
-          chromaShift: 0.22,
-          sharpen: 0.05,
-          blur: 0.115,
+          chromaShift: 0.28,
+          sharpen: 0.015,
+          blur: 0.14,
           flashBloom: 0,
           barrel: 0,
           edgeBlur: 0,
           edgeBlurStart: 0.7,
-          blockiness: 0.14,
-          haze: 0.015,
-          magentaBoost: 1.0,
-          coolBoost: 0.28,
+          blockiness: 0.11,
+          haze: 0.02,
+          magentaBoost: 0.35,
+          coolBoost: -0.25,
           edgeFade: 0,
-          vcrStrength: 0.34,
-          lowLightExposureBoost: 0.025,
-          lowLightNoiseBoost: 1.55,
+          vcrStrength: 0.42,
+          lowLightExposureBoost: 0.03,
+          lowLightNoiseBoost: 1.35,
           lowLightBloomBoost: 0,
-          lowLightContrastBoost: 0.01
+          lowLightContrastBoost: 0.012
         }
       }
     };
@@ -1204,15 +1204,15 @@
       const sctx = scratch.getContext('2d');
 
       faces.forEach((face) => {
-        const padX = face.width * 0.18;
-        const padY = face.height * 0.22;
+        const padX = face.width * lerp(0.2, 0.3, strength);
+        const padY = face.height * lerp(0.24, 0.34, strength);
         const x = Math.max(0, Math.floor(face.x - padX));
         const y = Math.max(0, Math.floor(face.y - padY));
         const w = Math.min(canvas.width - x, Math.ceil(face.width + padX * 2));
         const h = Math.min(canvas.height - y, Math.ceil(face.height + padY * 2));
         if (w < 4 || h < 4) return;
 
-        const pixelSize = Math.max(3, Math.round(Math.min(w, h) / lerp(28, 18, strength)));
+        const pixelSize = Math.max(3, Math.round(Math.min(w, h) / lerp(34, 22, strength)));
         const smallW = Math.max(1, Math.round(w / pixelSize));
         const smallH = Math.max(1, Math.round(h / pixelSize));
         scratch.width = smallW;
@@ -1223,7 +1223,7 @@
 
         ctx.save();
         ctx.beginPath();
-        ctx.ellipse(x + w / 2, y + h / 2, w * 0.485, h * 0.54, 0, 0, Math.PI * 2);
+        ctx.ellipse(x + w / 2, y + h / 2, w * 0.49, h * 0.55, 0, 0, Math.PI * 2);
         ctx.clip();
         ctx.imageSmoothingEnabled = false;
         ctx.drawImage(scratch, 0, 0, smallW, smallH, x, y, w, h);
@@ -1236,11 +1236,11 @@
 
     function applyVcrPass(ctx, width, height, strength, phase = 0) {
       const lowCanvas = document.createElement('canvas');
-      lowCanvas.width = Math.max(240, Math.round(width * lerp(0.62, 0.5, strength)));
-      lowCanvas.height = Math.max(180, Math.round(height * lerp(0.62, 0.5, strength)));
+      lowCanvas.width = Math.max(220, Math.round(width * lerp(0.56, 0.44, strength)));
+      lowCanvas.height = Math.max(160, Math.round(height * lerp(0.56, 0.44, strength)));
       const lctx = lowCanvas.getContext('2d');
       lctx.imageSmoothingEnabled = true;
-      lctx.filter = `blur(${Math.max(0.35, width * 0.00055)}px)`;
+      lctx.filter = `blur(${Math.max(0.8, width * 0.0011)}px)`;
       lctx.drawImage(ctx.canvas, 0, 0, lowCanvas.width, lowCanvas.height);
       lctx.filter = 'none';
 
@@ -1255,44 +1255,44 @@
       smearCanvas.height = height;
       const sctx = smearCanvas.getContext('2d');
       sctx.imageSmoothingEnabled = true;
-      sctx.filter = `blur(${Math.max(0.6, width * 0.0011)}px)`;
+      sctx.filter = `blur(${Math.max(1.1, width * 0.0018)}px)`;
       sctx.drawImage(ctx.canvas, 0, 0, width, height);
       sctx.filter = 'none';
 
       ctx.save();
-      ctx.globalAlpha = 0.08 + strength * 0.08;
-      ctx.drawImage(smearCanvas, 1.2, 0);
-      ctx.globalAlpha = 0.04 + strength * 0.05;
-      ctx.drawImage(smearCanvas, -0.9, 0);
+      ctx.globalAlpha = 0.12 + strength * 0.08;
+      ctx.drawImage(smearCanvas, 1.8, 0);
+      ctx.globalAlpha = 0.06 + strength * 0.05;
+      ctx.drawImage(smearCanvas, -1.2, 0);
       ctx.restore();
 
       const chromaCanvas = document.createElement('canvas');
       chromaCanvas.width = width;
       chromaCanvas.height = height;
       const cctx = chromaCanvas.getContext('2d');
-      cctx.filter = `blur(${Math.max(0.8, width * 0.0015)}px)`;
+      cctx.filter = `blur(${Math.max(1.4, width * 0.0022)}px)`;
       cctx.drawImage(ctx.canvas, 0, 0, width, height);
       cctx.filter = 'none';
 
       ctx.save();
       ctx.globalCompositeOperation = 'screen';
-      ctx.globalAlpha = 0.035 + strength * 0.04;
-      ctx.drawImage(chromaCanvas, 2, 0);
-      ctx.globalAlpha = 0.025 + strength * 0.03;
-      ctx.drawImage(chromaCanvas, -2, 0);
+      ctx.globalAlpha = 0.028 + strength * 0.025;
+      ctx.drawImage(chromaCanvas, 2.8, 0);
+      ctx.globalAlpha = 0.016 + strength * 0.018;
+      ctx.drawImage(chromaCanvas, -2.2, 0);
       ctx.restore();
 
       const base = ctx.getImageData(0, 0, width, height);
       const data = base.data;
       const original = new Uint8ClampedArray(data);
-      const globalShift = Math.sin(phase * 0.08) * (0.16 + strength * 0.22);
-      const shimmer = Math.sin(phase * 0.045) * (0.1 + strength * 0.16);
+      const globalShift = Math.sin(phase * 0.08) * (0.18 + strength * 0.18);
+      const shimmer = Math.sin(phase * 0.045) * (0.08 + strength * 0.1);
 
       for (let y = 0; y < height; y++) {
-        const rowDrift = Math.sin((y * 0.009) + phase * 0.02) * (0.12 + strength * 0.18);
+        const rowDrift = Math.sin((y * 0.008) + phase * 0.018) * (0.14 + strength * 0.12);
         const xShift = Math.round(globalShift + shimmer + rowDrift);
-        const chromaJitter = Math.round(Math.sin((y * 0.011) + phase * 0.032) * (0.34 + strength * 0.62));
-        const rowLift = Math.sin((y * 0.007) + phase * 0.016) * (0.3 + strength * 0.48);
+        const chromaJitter = Math.round(Math.sin((y * 0.012) + phase * 0.03) * (0.48 + strength * 0.62));
+        const rowLift = Math.sin((y * 0.007) + phase * 0.016) * (0.22 + strength * 0.24);
 
         for (let x = 0; x < width; x++) {
           const i = ((y * width) + x) * 4;
@@ -1303,21 +1303,35 @@
           const sri = ((y * width) + srcR) * 4;
           const sbi = ((y * width) + srcB) * 4;
 
-          const monoNoise = (Math.random() * 2 - 1) * (0.55 + strength * 0.55);
-          const redNoise = (Math.random() * 2 - 1) * (0.35 + strength * 0.25);
-          const blueNoise = (Math.random() * 2 - 1) * (0.42 + strength * 0.32);
+          const monoNoise = (Math.random() * 2 - 1) * (0.45 + strength * 0.4);
+          const redNoise = (Math.random() * 2 - 1) * (0.22 + strength * 0.18);
+          const blueNoise = (Math.random() * 2 - 1) * (0.28 + strength * 0.22);
 
-          data[i] = clamp(original[sri] + rowLift + monoNoise + redNoise);
-          data[i + 1] = clamp(original[si + 1] + rowLift * 0.52 + monoNoise * 0.86);
-          data[i + 2] = clamp(original[sbi + 2] + rowLift * 0.68 + monoNoise + blueNoise);
+          let r = original[sri] + rowLift + monoNoise + redNoise;
+          let g = original[si + 1] + rowLift * 0.56 + monoNoise * 0.8;
+          let b = original[sbi + 2] + rowLift * 0.7 + monoNoise + blueNoise;
+
+          const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+          const sat = 0.78 - strength * 0.12;
+          r = luma + (r - luma) * sat;
+          g = luma + (g - luma) * sat;
+          b = luma + (b - luma) * sat;
+
+          r = r * 1.01 + 1.5;
+          g = g * 0.995 + 1.0;
+          b = b * 0.94 + 0.2;
+
+          data[i] = clamp(r);
+          data[i + 1] = clamp(g);
+          data[i + 2] = clamp(b);
         }
       }
 
       ctx.putImageData(base, 0, 0);
 
       ctx.save();
-      ctx.globalAlpha = 0.06 + strength * 0.06;
-      ctx.fillStyle = 'rgba(255,245,238,0.16)';
+      ctx.globalAlpha = 0.075 + strength * 0.045;
+      ctx.fillStyle = 'rgba(242,233,223,0.18)';
       ctx.fillRect(0, 0, width, height);
       ctx.restore();
     }
@@ -1373,8 +1387,8 @@
 
       if (modeKey === 'vcr') {
         const faces = await detectFacesOnCanvas(sourceCanvas, !!options.forceFaceDetection);
+        applyMosaicToFaces(rctx, faces, 0.86);
         applyVcrPass(rctx, renderCanvas.width, renderCanvas.height, profile.vcrStrength, STATE.vcrFieldPhase);
-        applyMosaicToFaces(rctx, faces, 0.8);
       }
 
       return {
